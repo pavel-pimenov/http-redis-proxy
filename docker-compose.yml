@@ -1,6 +1,6 @@
 services:
-  redis:
-    image: redis:alpine
+  valkey:
+    image: valkey/valkey:alpine
     ports:
       - "6379:6379"
 
@@ -9,17 +9,33 @@ services:
     ports:
       - "3000:3000"
     depends_on:
-      - redis
+      - valkey
 
   l2-proxy:
     build: ./cpp/l2-proxy
     ports:
       - "8080:8080"
     depends_on:
-      - redis
+      - valkey
 
   l2-worker:
     build: ./cpp/l2-worker
     depends_on:
-      - redis
+      - valkey
       - l2-server
+
+  redisinsight:
+    image: redis/redisinsight:latest
+    ports:
+      - "5540:5540"
+    depends_on:
+      - valkey
+    environment:
+      - RIPORT=5540
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
