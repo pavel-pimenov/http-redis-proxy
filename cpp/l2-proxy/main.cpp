@@ -109,7 +109,7 @@ public:
 };
 
 int main() {
-    std::string redis_host = "redis";
+    std::string redis_host = "valkey";
     int redis_port = 6379;
     
     DMZProxy proxy("http://0.0.0.0:8080", redis_host, redis_port);

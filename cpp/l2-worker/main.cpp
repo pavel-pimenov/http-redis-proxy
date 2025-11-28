@@ -120,7 +120,7 @@ public:
 };
 
 int main() {
-    std::string redis_host = "redis";
+    std::string redis_host = "valkey";
     int redis_port = 6379;
     std::string l2_server_url = "http://l2-server:3000";
 
