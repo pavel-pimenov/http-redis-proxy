@@ -1,6 +1,6 @@
 # http-redis-proxy
 
-sudo apt install libcpprest-dev libhiredis-dev libmicrohttpd-dev libjsoncpp-dev libcurl4-openssl-dev
+sudo apt install libcpprest-dev libhiredis-dev libmicrohttpd-dev libjsoncpp-dev libcurl4-openssl-dev python3-pip
 
 Perfect! The docker-compose.yml has been updated successfully:
 
