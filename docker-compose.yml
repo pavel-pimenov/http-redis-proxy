@@ -23,6 +23,12 @@ services:
       - valkey
     networks:
       - l2_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.l2proxy.rule=Host(`localhost`)"
+      - "traefik.http.routers.l2proxy.entrypoints=websecure"
+      - "traefik.http.routers.l2proxy.service=l2proxy"
+      - "traefik.http.services.l2proxy.loadbalancer.server.port=8888"
 
   l2-worker:
     build: ./cpp/l2-worker
@@ -40,6 +46,21 @@ services:
       - valkey
     environment:
       - RIPORT=5540
+    networks:
+      - l2_network
+
+  traefik:
+    image: traefik:v3.1
+    ports:
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.websecure.address=:443"
+    depends_on:
+      - l2-proxy
     networks:
       - l2_network
 

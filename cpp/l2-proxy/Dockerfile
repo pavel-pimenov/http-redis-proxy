@@ -4,22 +4,21 @@ RUN apt-get update && apt-get install -y \
     g++ \
     cmake \
     libhiredis-dev \
-    libcpprest-dev \
     libssl-dev \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY . .
-RUN g++ -std=c++17 -o dmz-proxy main.cpp -lcpprest -lhiredis -lssl -lcrypto -lpthread
+COPY CMakeLists.txt main.cpp ./
+RUN mkdir build && cd build && cmake .. && make
 
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y \
     libhiredis1.1.0 \
-    libcpprest2.10 \
     libssl3t64 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
-COPY --from=builder /app/dmz-proxy .
+COPY --from=builder /app/build/l2-proxy .
 EXPOSE 8888
-CMD ["./dmz-proxy"]
+CMD ["./l2-proxy"]
