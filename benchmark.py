@@ -25,7 +25,7 @@ async def make_request(session: aiohttp.ClientSession, request_id: int, url: str
     """Make a single HTTP request and return timing info."""
     start_time = time.time()
     try:
-        async with session.get(url) as response:
+        async with session.post(url) as response:
             end_time = time.time()
             response_time = (end_time - start_time) * 1000  # Convert to milliseconds
             success = response.status == 200

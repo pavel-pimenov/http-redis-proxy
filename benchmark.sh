@@ -75,10 +75,10 @@ echo "Concurrent requests: $CONCURRENT"
 echo "----------------------------------------"
 
 # Run Apache Bench
-echo "Running: ab -n $REQUESTS -c $CONCURRENT -g benchmark.tsv $URL"
+echo "Running: ab -n $REQUESTS -c $CONCURRENT -m POST -g benchmark.tsv $URL"
 echo ""
 
-ab -n "$REQUESTS" -c "$CONCURRENT" -g benchmark.tsv "$URL"
+ab -n "$REQUESTS" -c "$CONCURRENT" -m POST -g benchmark.tsv "$URL"
 
 # Check the exit code
 AB_EXIT_CODE=$?
