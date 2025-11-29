@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     libhiredis-dev \
     libssl-dev \
+    libcpprest-dev \
     git \
     && rm -rf /var/lib/apt/lists/*
 
@@ -20,6 +21,7 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y \
     libhiredis1.1.0 \
     libssl3t64 \
+    libcpprest2.10 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/

@@ -11,6 +11,7 @@
 #include <hiredis/hiredis.h>
 
 #include <cpprest/json.h>
+using namespace web;
 
 static int g_exit_flag = 0;
 
@@ -77,13 +78,14 @@ public:
             // Prepare request data for Redis
         json::value request_data;
         request_data[U("id")] = json::value::string(utility::conversions::to_string_t(request_id));
-        request_data[U("method")] = json::value::string(utility::conversions::to_string_t(request.method()));
-        request_data[U("path")] = json::value::string(request.relative_uri().path());
+        request_data[U("method")] = json::value::string(utility::conversions::to_string_t(method));
+        request_data[U("path")] = json::value::string(utility::conversions::to_string_t(path));
         std::cout << "request_data: " << request_data << std::endl;
 
         // Push to Redis queue
         if (redis && !redis->err) {
-            redisReply* reply = (redisReply*)redisCommand(redis, "RPUSH http:requests %s", request_data.c_str());
+            std::string request_json = utility::conversions::to_utf8string(request_data.serialize());
+            redisReply* reply = (redisReply*)redisCommand(redis, "RPUSH http:requests %s", request_json.c_str());
             if (reply) freeReplyObject(reply);
         }
 
@@ -102,9 +104,10 @@ public:
         response[U("language")] = json::value::string(U("C++"));
         response[U("timestamp")] = json::value::number(std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
-        std::cout << "response" << response << std::endl;        
-        
-        mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response.c_str());
+        std::cout << "response" << response << std::endl;
+
+        std::string response_json = utility::conversions::to_utf8string(response.serialize());
+        mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response_json.c_str());
         return true;
     }
 };
