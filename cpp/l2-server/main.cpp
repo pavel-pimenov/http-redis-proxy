@@ -1,94 +1,101 @@
-#include <microhttpd.h>
-#include <jsoncpp/json/json.h>
 #include <iostream>
-#include <string>
-#include <chrono>
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <thread>
+#include <vector>
 
-class L2Server {
+class EchoServer {
 private:
-    struct MHD_Daemon* daemon;
-    
-    static MHD_Result answer_to_connection(void* cls, struct MHD_Connection* connection,
-                                   const char* url, const char* method,
-                                   const char* version, const char* upload_data,
-                                   size_t* upload_data_size, void** con_cls) {
-        
-        std::string response_json;
-        Json::Value response;
-        
-        if (std::string(url) == "/health" && std::string(method) == "GET") {
-            auto response_ptr = MHD_create_response_from_buffer(2, (void*)"OK", MHD_RESPMEM_PERSISTENT);
-            MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response_ptr);
-            MHD_destroy_response(response_ptr);
-            return ret;
+    int server_fd;
+    int port;
+    bool running;
+
+    void handle_client(int client_fd) {
+        char buffer[1024];
+        while (true) {
+            ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+            if (bytes_read <= 0) {
+                break;
+            }
+            write(client_fd, buffer, bytes_read);
         }
-        else if (std::string(url) == "/" && std::string(method) == "GET") {
-            response["message"] = "Hello from C++ L2 Server!";
-            response["language"] = "C++";
-            response["timestamp"] = (Json::Int64)std::chrono::duration_cast<std::chrono::seconds>(
-                std::chrono::system_clock::now().time_since_epoch()).count();
-            response["server"] = "C++ L2 Server";
-            response["status"] = "operational";
-        }
-        else if (std::string(url) == "/api/info" && std::string(method) == "GET") {
-            response["server"] = "C++ L2 Server";
-            response["status"] = "operational";
-            response["framework"] = "libmicrohttpd";
-            response["performance"] = "high";
-        }
-        else {
-            response["error"] = "Endpoint not found";
-            response["path"] = url;
-            
-            Json::StreamWriterBuilder writer;
-            response_json = Json::writeString(writer, response);
-            
-            auto response_ptr = MHD_create_response_from_buffer(response_json.length(),
-                                                              (void*)response_json.c_str(),
-                                                              MHD_RESPMEM_MUST_COPY);
-            MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_NOT_FOUND, response_ptr);
-            MHD_destroy_response(response_ptr);
-            return ret;
-        }
-        
-        Json::StreamWriterBuilder writer;
-        response_json = Json::writeString(writer, response);
-        
-        auto response_ptr = MHD_create_response_from_buffer(response_json.length(), 
-                                                          (void*)response_json.c_str(), 
-                                                          MHD_RESPMEM_MUST_COPY);
-        MHD_add_response_header(response_ptr, "Content-Type", "application/json");
-        
-        MHD_Result ret = MHD_queue_response(connection, MHD_HTTP_OK, response_ptr);
-        MHD_destroy_response(response_ptr);
-        return ret;
+        close(client_fd);
     }
 
 public:
-    L2Server(int port) {
-        daemon = MHD_start_daemon(MHD_USE_INTERNAL_POLLING_THREAD, port, NULL, NULL,
-                                 &answer_to_connection, NULL, MHD_OPTION_END);
-        if (!daemon) {
-            std::cerr << "Failed to start L2 server on port " << port << std::endl;
+    EchoServer(int p) : port(p), running(true) {
+        server_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (server_fd < 0) {
+            std::cerr << "Failed to create socket" << std::endl;
+            exit(1);
+        }
+
+        int opt = 1;
+        setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+        sockaddr_in address;
+        address.sin_family = AF_INET;
+        address.sin_addr.s_addr = INADDR_ANY;
+        address.sin_port = htons(port);
+
+        if (bind(server_fd, (sockaddr*)&address, sizeof(address)) < 0) {
+            std::cerr << "Failed to bind to port " << port << std::endl;
+            exit(1);
+        }
+
+        if (listen(server_fd, 10) < 0) {
+            std::cerr << "Failed to listen" << std::endl;
             exit(1);
         }
     }
-    
-    ~L2Server() {
-        if (daemon) {
-            MHD_stop_daemon(daemon);
+
+    ~EchoServer() {
+        running = false;
+        close(server_fd);
+    }
+
+    void run() {
+        std::cout << "Echo server running on port " << port << std::endl;
+        std::vector<std::thread> threads;
+
+        while (running) {
+            sockaddr_in client_addr;
+            socklen_t client_len = sizeof(client_addr);
+            int client_fd = accept(server_fd, (sockaddr*)&client_addr, &client_len);
+            if (client_fd < 0) {
+                if (running) {
+                    std::cerr << "Failed to accept connection" << std::endl;
+                }
+                continue;
+            }
+
+            threads.emplace_back(&EchoServer::handle_client, this, client_fd);
+        }
+
+        for (auto& t : threads) {
+            if (t.joinable()) {
+                t.join();
+            }
         }
     }
-    
-    void wait() {
-        std::cout << "C++ L2 Server running on port 3000" << std::endl;
-        std::cout << "Press Enter to stop..." << std::endl;
-        std::cin.get();
+
+    void stop() {
+        running = false;
+        close(server_fd);
     }
 };
 
 int main() {
-    L2Server server(3000);
-    server.wait();
+    EchoServer server(3000);
+    std::thread server_thread(&EchoServer::run, &server);
+
+    std::cout << "Press Enter to stop..." << std::endl;
+    std::cin.get();
+
+    server.stop();
+    server_thread.join();
+
     return 0;
 }

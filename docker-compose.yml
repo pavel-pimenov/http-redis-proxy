@@ -7,9 +7,9 @@ services:
       - l2_network
 
   l2-server:
-    build: ./cpp/l2-server
+    image: ealen/echo-server:latest
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       - valkey
     networks:
@@ -46,6 +46,8 @@ services:
       - valkey
     environment:
       - RIPORT=5540
+      - RIHOST=valkey
+      - RIPORT_REDIS=6379
     networks:
       - l2_network
 
