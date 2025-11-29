@@ -3,13 +3,23 @@ services:
     image: valkey/valkey:alpine
     ports:
       - "6379:6379"
+    volumes:
+      - ./valkey.conf:/etc/valkey/valkey.conf
+    command: valkey-server /etc/valkey/valkey.conf
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     networks:
       - l2_network
 
   l2-server:
     image: ealen/echo-server:latest
     ports:
-      - "3000:80"
+      - "3000:8080"
+    environment:
+      - PORT=8080
     depends_on:
       - valkey
     networks:
@@ -20,7 +30,8 @@ services:
     ports:
       - "8888:8888"
     depends_on:
-      - valkey
+      valkey:
+        condition: service_healthy
     networks:
       - l2_network
     labels:
