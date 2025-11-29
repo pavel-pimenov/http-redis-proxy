@@ -10,7 +10,7 @@
 #include "CivetServer.h"
 #include <hiredis/hiredis.h>
 
-//#include <cpprest/json.h>
+#include <cpprest/json.h>
 
 static int g_exit_flag = 0;
 
@@ -72,13 +72,13 @@ public:
         auto request_id = generate_uuid();
 
         // Prepare request data for Redis
-         std::string request_data = "{\"id\": \"" + request_id + "\", \"method\": \"" + method + "\", \"path\": \"" + path + "\"}";
+        // std::string request_data = "{\"id\": \"" + request_id + "\", \"method\": \"" + method + "\", \"path\": \"" + path + "\"}";
 
             // Prepare request data for Redis
-        //json::value request_data;
-        //request_data[U("id")] = json::value::string(utility::conversions::to_string_t(request_id));
-        //request_data[U("method")] = json::value::string(utility::conversions::to_string_t(request.method()));
-        //request_data[U("path")] = json::value::string(request.relative_uri().path());
+        json::value request_data;
+        request_data[U("id")] = json::value::string(utility::conversions::to_string_t(request_id));
+        request_data[U("method")] = json::value::string(utility::conversions::to_string_t(request.method()));
+        request_data[U("path")] = json::value::string(request.relative_uri().path());
         std::cout << "request_data: " << request_data << std::endl;
 
         // Push to Redis queue
@@ -91,17 +91,17 @@ public:
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
         // Send response
-        auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
-        std::string response = "{\"message\": \"Processed by C++ DMZ Proxy\", \"request_id\": \"" + request_id + "\", \"language\": \"C++\", \"timestamp\": " + std::to_string(timestamp) + "}";
+        // auto timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+        //     std::chrono::system_clock::now().time_since_epoch()).count();
+        // std::string response = "{\"message\": \"Processed by C++ DMZ Proxy\", \"request_id\": \"" + request_id + "\", \"language\": \"C++\", \"timestamp\": " + std::to_string(timestamp) + "}";
 
 // Send response
-        //json::value response;
-        //response[U("message")] = json::value::string(U("Processed by C++ DMZ Proxy"));
-        //response[U("request_id")] = json::value::string(utility::conversions::to_string_t(request_id));
-        //response[U("language")] = json::value::string(U("C++"));
-        //response[U("timestamp")] = json::value::number(std::chrono::duration_cast<std::chrono::seconds>(
-        //    std::chrono::system_clock::now().time_since_epoch()).count());
+        json::value response;
+        response[U("message")] = json::value::string(U("Processed by C++ DMZ Proxy"));
+        response[U("request_id")] = json::value::string(utility::conversions::to_string_t(request_id));
+        response[U("language")] = json::value::string(U("C++"));
+        response[U("timestamp")] = json::value::number(std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
         std::cout << "response" << response << std::endl;        
         
         mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response.c_str());

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(l2-proxy)
 
 # Find required packages
-# find_package(cpprestsdk REQUIRED)
+find_package(cpprestsdk REQUIRED)
 
 # Find hiredis manually
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
@@ -58,7 +58,7 @@ target_include_directories(l2-proxy PRIVATE ${HIREDIS_INCLUDE_DIR})
 target_include_directories(l2-proxy PRIVATE ${SOURCE_DIR}/include)
 
 # Link libraries
-# target_link_libraries(l2-proxy PRIVATE cpprestsdk::cpprest ${HIREDIS_LIBRARY} OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(l2-proxy PRIVATE cpprestsdk::cpprest ${HIREDIS_LIBRARY} OpenSSL::SSL OpenSSL::Crypto)
 
 include_directories(prometheus-cpp/core/include)
 include_directories(prometheus-cpp/include)
