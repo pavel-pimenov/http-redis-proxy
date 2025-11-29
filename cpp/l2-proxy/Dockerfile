@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 COPY CMakeLists.txt main.cpp ./
+COPY civetweb/ civetweb/
+COPY jsoncpp/ jsoncpp/
+COPY prometheus-cpp/ prometheus-cpp/
+COPY sqlite/ sqlite/
 RUN mkdir build && cd build && cmake .. && make
 
 FROM ubuntu:24.04

@@ -5,11 +5,14 @@
 #include <random>
 #include <string>
 #include <ctime>
+#include <unistd.h>
 
 #include "CivetServer.h"
 #include <hiredis/hiredis.h>
 
 //#include <cpprest/json.h>
+
+static int g_exit_flag = 0;
 
 class HealthHandler : public CivetHandler {
 private:
@@ -119,16 +122,39 @@ int main() {
     HealthHandler health_handler(redis);
     RequestHandler request_handler(redis);
 
-    std::vector<std::string> options = {"listening_ports", "8888"};
-    CivetServer server(options);
-    server.addHandler("/health", &health_handler);
-    server.addHandler("/", &request_handler);
+     const char *options[] = {
+	  "listening_ports", "8888",
+	  "num_threads", "10",
+	  "enable_directory_listing", "no",
+	  0 };
+	std::vector<std::string> cpp_options;
+	for (int i = 0; i < (sizeof(options) / sizeof(options[0]) - 1); i++) {
+		cpp_options.push_back(options[i]);
+		std::cout << options[i];
+		std::cout << std::endl;
+	}
 
-    std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8888" << std::endl;
-    std::cout << "Press Enter to exit..." << std::endl;
+    try {
+        CivetServer server(cpp_options);
+        // server.addHandler("/health", &health_handler);
+        server.addHandler("/", &request_handler);
 
-    std::string line;
-    std::getline(std::cin, line);
+        std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8888" << std::endl;
+
+        while (g_exit_flag == 0)
+        {
+            sleep(1);
+        }
+    }
+    catch (CivetException& e)
+    {
+        std::cout << "CivetException:" << e.what() << std::endl;
+    }
+
+//   std::cout << "Press Enter to exit..." << std::endl;
+
+//    std::string line;
+//    std::getline(std::cin, line);
 
     // Server will stop when going out of scope
     redisFree(redis);

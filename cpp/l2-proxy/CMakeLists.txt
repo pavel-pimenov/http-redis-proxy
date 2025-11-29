@@ -5,8 +5,8 @@ project(l2-proxy)
 # find_package(cpprestsdk REQUIRED)
 
 # Find hiredis manually
-find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
-find_library(HIREDIS_LIBRARY hiredis)
+find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
+find_library(HIREDIS_LIBRARY hiredis REQUIRED)
 
 # Add CivetWeb as external project
 # include(ExternalProject)
@@ -18,15 +18,18 @@ find_library(HIREDIS_LIBRARY hiredis)
 #    INSTALL_COMMAND ""
 #)
 
+ # TODO
+ #sqlite/sqlite3x_command.cpp
+ #sqlite/sqlite3x_connection.cpp
+ #sqlite/sqlite3x_reader.cpp
+ #sqlite/sqlite3x_transaction.cpp
+ #sqlite/sqlite3.c
+
+
 # Add executable
 add_executable(l2-proxy 
 main.cpp
 jsoncpp/jsoncpp.cpp
- sqlite/sqlite3x_command.cpp
- sqlite/sqlite3x_connection.cpp
- sqlite/sqlite3x_reader.cpp
- sqlite/sqlite3x_transaction.cpp
- sqlite/sqlite3.c
  prometheus-cpp/pull/src/basic_auth.cc
  prometheus-cpp/pull/src/endpoint.cc
  prometheus-cpp/pull/src/exposer.cc
@@ -64,3 +67,5 @@ include_directories(prometheus-cpp/pull/include)
 include_directories(civetweb)
 include_directories(jsoncpp)
 include_directories(sqlite)
+
+target_link_libraries(l2-proxy PRIVATE ${HIREDIS_LIBRARY})
