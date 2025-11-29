@@ -37,7 +37,7 @@ import asyncio
 import aiohttp
 
 # Configuration
-PROXY_URL = "http://localhost:8080"
+PROXY_URL = "http://localhost:8888"
 SERVER_URL = "http://localhost:3000"
 REDISINSIGHT_URL = "http://localhost:5540"
 NUM_REQUESTS = 50

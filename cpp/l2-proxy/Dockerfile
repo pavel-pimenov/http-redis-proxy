@@ -21,5 +21,5 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /root/
 COPY --from=builder /app/dmz-proxy .
-EXPOSE 8080
+EXPOSE 8888
 CMD ["./dmz-proxy"]

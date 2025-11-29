@@ -3,6 +3,8 @@ services:
     image: valkey/valkey:alpine
     ports:
       - "6379:6379"
+    networks:
+      - l2_network
 
   l2-server:
     build: ./cpp/l2-server
@@ -10,19 +12,25 @@ services:
       - "3000:3000"
     depends_on:
       - valkey
+    networks:
+      - l2_network
 
   l2-proxy:
     build: ./cpp/l2-proxy
     ports:
-      - "8080:8080"
+      - "8888:8888"
     depends_on:
       - valkey
+    networks:
+      - l2_network
 
   l2-worker:
     build: ./cpp/l2-worker
     depends_on:
       - valkey
       - l2-server
+    networks:
+      - l2_network
 
   redisinsight:
     image: redis/redisinsight:latest
@@ -32,10 +40,12 @@ services:
       - valkey
     environment:
       - RIPORT=5540
+    networks:
+      - l2_network
 
 networks:
-  default:
+  l2_network:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.25.0.0/16
+        - subnet: 172.28.0.0/16

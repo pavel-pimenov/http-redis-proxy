@@ -68,6 +68,7 @@ public:
         request_data[U("id")] = json::value::string(utility::conversions::to_string_t(request_id));
         request_data[U("method")] = json::value::string(utility::conversions::to_string_t(request.method()));
         request_data[U("path")] = json::value::string(request.relative_uri().path());
+        std::cout << "request_data" << request_data << std::endl;
         
         // Push to Redis queue
         if (redis && !redis->err) {
@@ -86,7 +87,7 @@ public:
         response[U("language")] = json::value::string(U("C++"));
         response[U("timestamp")] = json::value::number(std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count());
-        
+        std::cout << "response" << response << std::endl;
         request.reply(status_codes::OK, response);
     }
 
@@ -112,12 +113,12 @@ int main() {
     std::string redis_host = "valkey";
     int redis_port = 6379;
     
-    DMZProxy proxy("http://0.0.0.0:8080", redis_host, redis_port);
+    DMZProxy proxy("http://0.0.0.0:8888", redis_host, redis_port);
     proxy.init();
     
     try {
         proxy.open().wait();
-        std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8080" << std::endl;
+        std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8888" << std::endl;
         std::cout << "Press Enter to exit..." << std::endl;
         
         std::string line;
