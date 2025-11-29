@@ -40,3 +40,9 @@ build
 
 # debug information files
 *.dwo
+
+venv
+.vscode
+.PVS-Studio
+
+
