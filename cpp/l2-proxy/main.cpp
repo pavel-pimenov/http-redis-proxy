@@ -6,6 +6,7 @@
 #include <string>
 #include <ctime>
 #include <unistd.h>
+#include <mutex>
 
 #include "CivetServer.h"
 #include <hiredis/hiredis.h>
@@ -18,11 +19,13 @@ static int g_exit_flag = 0;
 class HealthHandler : public CivetHandler {
 private:
     redisContext* redis;
+    std::mutex redis_mutex;
 
 public:
     HealthHandler(redisContext* r) : redis(r) {}
 
     bool handleGet(CivetServer *server, struct mg_connection *conn) {
+        std::lock_guard<std::mutex> lock(redis_mutex);
         if (redis && redis->err) {
             mg_printf(conn, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\n\r\nRedis unavailable");
             return true;
@@ -39,9 +42,51 @@ public:
     }
 };
 
+class StatsHandler : public CivetHandler {
+private:
+    redisContext* redis;
+    std::mutex redis_mutex;
+
+public:
+    StatsHandler(redisContext* r) : redis(r) {}
+
+    bool handleGet(CivetServer *server, struct mg_connection *conn) {
+        std::lock_guard<std::mutex> lock(redis_mutex);
+        if (!redis || redis->err) {
+            mg_printf(conn, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\n\r\nRedis unavailable");
+            return true;
+        }
+
+        redisReply* writes_reply = (redisReply*)redisCommand(redis, "GET stats:redis_writes");
+        redisReply* reads_reply = (redisReply*)redisCommand(redis, "GET stats:redis_reads");
+
+        long long writes = 0;
+        long long reads = 0;
+
+        if (writes_reply && writes_reply->type == REDIS_REPLY_STRING) {
+            writes = atoll(writes_reply->str);
+        }
+        if (reads_reply && reads_reply->type == REDIS_REPLY_STRING) {
+            reads = atoll(reads_reply->str);
+        }
+
+        json::value stats;
+        stats[U("redis_writes")] = json::value::number(writes);
+        stats[U("redis_reads")] = json::value::number(reads);
+
+        std::string stats_json = utility::conversions::to_utf8string(stats.serialize());
+        mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", stats_json.c_str());
+
+        if (writes_reply) freeReplyObject(writes_reply);
+        if (reads_reply) freeReplyObject(reads_reply);
+        return true;
+    }
+};
+
 class RequestHandler : public CivetHandler {
 private:
     redisContext* redis;
+    std::mutex redis_mutex;
 
     std::string generate_uuid() {
         std::random_device rd;
@@ -84,9 +129,13 @@ public:
 
         // Push to Redis queue
         if (redis && !redis->err) {
+            std::lock_guard<std::mutex> lock(redis_mutex);
             std::string request_json = utility::conversions::to_utf8string(request_data.serialize());
             redisReply* reply = (redisReply*)redisCommand(redis, "RPUSH http:requests %s", request_json.c_str());
             if (reply) freeReplyObject(reply);
+            // Increment write counter
+            redisReply* incr_reply = (redisReply*)redisCommand(redis, "INCR stats:redis_writes");
+            if (incr_reply) freeReplyObject(incr_reply);
         }
 
         // Wait for response (simplified - in real implementation would poll Redis)
@@ -124,6 +173,7 @@ int main() {
 
     HealthHandler health_handler(redis);
     RequestHandler request_handler(redis);
+    StatsHandler stats_handler(redis);
 
      const char *options[] = {
 	  "listening_ports", "8888",
@@ -140,6 +190,7 @@ int main() {
     try {
         CivetServer server(cpp_options);
         // server.addHandler("/health", &health_handler);
+        server.addHandler("/stats", &stats_handler);
         server.addHandler("/", &request_handler);
 
         std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8888" << std::endl;

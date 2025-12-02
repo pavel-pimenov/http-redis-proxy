@@ -107,12 +107,15 @@ public:
 
         while (true) {
             redisReply* reply = (redisReply*)redisCommand(redis, "BLPOP http:requests 10");
-            
+
             if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements == 2) {
                 std::string request_json = reply->element[1]->str;
                 process_request(request_json);
+                // Increment read counter
+                redisReply* incr_reply = (redisReply*)redisCommand(redis, "INCR stats:redis_reads");
+                if (incr_reply) freeReplyObject(incr_reply);
             }
-            
+
             if (reply) freeReplyObject(reply);
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }

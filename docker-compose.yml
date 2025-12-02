@@ -20,6 +20,7 @@ services:
       - "3000:8080"
     environment:
       - PORT=8080
+      - LOG_REQUESTS=true
     depends_on:
       - valkey
     networks:
