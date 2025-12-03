@@ -75,10 +75,10 @@ echo "Concurrent requests: $CONCURRENT"
 echo "----------------------------------------"
 
 # Run Apache Bench
-echo "Running: ab -n $REQUESTS -c $CONCURRENT -m POST $URL"
+echo "Running: ab -n $REQUESTS -c $CONCURRENT -p test_payload.json -T application/json $URL"
 echo ""
 
-ab -n "$REQUESTS" -c "$CONCURRENT" -m POST "$URL"
+ab -n "$REQUESTS" -c "$CONCURRENT" -p test_payload.json -T application/json "$URL"
 
 # Check the exit code
 AB_EXIT_CODE=$?

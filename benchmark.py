@@ -15,6 +15,11 @@ DEFAULT_URL = "http://localhost:8888/"
 DEFAULT_NUM_REQUESTS = 1000
 DEFAULT_CONCURRENT = 50
 
+# JSON payload for POST requests (approximately 151 bytes)
+PAYLOAD = {
+    "test_key": "This is a test value to make the JSON payload between 50 and 200 bytes in size for benchmarking purposes. It includes some dummy data."
+}
+
 class Colors:
     GREEN = '\033[0;32m'
     RED = '\033[0;31m'
@@ -25,7 +30,7 @@ async def make_request(session: aiohttp.ClientSession, request_id: int, url: str
     """Make a single HTTP request and return timing info."""
     start_time = time.time()
     try:
-        async with session.post(url) as response:
+        async with session.post(url, json=PAYLOAD) as response:
             end_time = time.time()
             response_time = (end_time - start_time) * 1000  # Convert to milliseconds
             success = response.status == 200
