@@ -67,10 +67,11 @@ def stop_services():
     run_command(["docker-compose", "down"])
 
 def test_endpoint(url: str, expected_status: int = 200, description: str = "") -> bool:
-    """Test a single endpoint."""
+    """Test a single endpoint with POST request."""
     print(f"Testing {description} ({url})... ", end="", flush=True)
+    json_payload = {"test": "data", "number": 123}
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.post(url, json=json_payload, timeout=10)
         if response.status_code == expected_status:
             print(f"{Colors.GREEN}PASS{Colors.NC} (Status: {response.status_code})")
             return True
@@ -83,10 +84,11 @@ def test_endpoint(url: str, expected_status: int = 200, description: str = "") -
         return False
 
 def test_json_endpoint(url: str, description: str = "") -> bool:
-    """Test an endpoint that should return valid JSON."""
+    """Test an endpoint that should return valid JSON with POST request."""
     print(f"Testing {description} ({url})... ", end="", flush=True)
+    json_payload = {"test": "data", "number": 123}
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.post(url, json=json_payload, timeout=10)
         if response.status_code == 200:
             try:
                 json.loads(response.text)
@@ -104,10 +106,11 @@ def test_json_endpoint(url: str, description: str = "") -> bool:
         return False
 
 async def make_async_request(session: aiohttp.ClientSession, request_id: int) -> Tuple[int, float, bool]:
-    """Make a single async request and return timing info."""
+    """Make a single async POST request with JSON payload and return timing info."""
     start_time = time.time()
+    json_payload = {"test": "data", "number": 123}
     try:
-        async with session.get(PROXY_URL) as response:
+        async with session.post(PROXY_URL, json=json_payload) as response:
             end_time = time.time()
             return request_id, end_time - start_time, response.status == 200
     except Exception:
