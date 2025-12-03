@@ -104,14 +104,25 @@ public:
     RequestHandler(redisContext* r) : redis(r) {}
 
     bool handleGet(CivetServer *server, struct mg_connection *conn) {
-        return handle_request(server, conn, "GET");
+        return handle_request(server, conn, "GET", "");
     }
 
     bool handlePost(CivetServer *server, struct mg_connection *conn) {
-        return handle_request(server, conn, "POST");
+        const struct mg_request_info *req_info = mg_get_request_info(conn);
+        std::string body;
+        if (req_info->content_length > 0) {
+            char* buffer = new char[req_info->content_length + 1];
+            int read_len = mg_read(conn, buffer, req_info->content_length);
+            if (read_len > 0) {
+                buffer[read_len] = '\0';
+                body = std::string(buffer);
+            }
+            delete[] buffer;
+        }
+        return handle_request(server, conn, "POST", body);
     }
 
-    bool handle_request(CivetServer *server, struct mg_connection *conn, const std::string& method) {
+    bool handle_request(CivetServer *server, struct mg_connection *conn, const std::string& method, const std::string& body = "") {
         const struct mg_request_info *req_info = mg_get_request_info(conn);
         std::string path = req_info->request_uri ? req_info->request_uri : "/";
 
@@ -125,6 +136,9 @@ public:
         request_data[U("id")] = json::value::string(utility::conversions::to_string_t(request_id));
         request_data[U("method")] = json::value::string(utility::conversions::to_string_t(method));
         request_data[U("path")] = json::value::string(utility::conversions::to_string_t(path));
+        if (!body.empty()) {
+            request_data[U("body")] = json::value::string(utility::conversions::to_string_t(body));
+        }
         std::cout << "request_data: " << request_data << std::endl;
 
         // Push to Redis queue

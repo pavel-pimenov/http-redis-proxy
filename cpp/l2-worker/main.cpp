@@ -44,7 +44,7 @@ public:
         }
     }
 
-    std::string call_l2_server(const std::string& path) {
+    std::string call_l2_server(const std::string& path, const std::string& body) {
         std::string url = l2_server_url + path;
         std::string response_string;
 
@@ -52,6 +52,15 @@ public:
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT, 10L);
+
+        if (!body.empty()) {
+            curl_easy_setopt(curl, CURLOPT_POST, 1L);
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.c_str());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, body.length());
+            struct curl_slist* headers = NULL;
+            headers = curl_slist_append(headers, "Content-Type: application/json");
+            curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+        }
 
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
@@ -64,34 +73,41 @@ public:
     void process_request(const std::string& request_json) {
         Json::Value request_data;
         Json::Reader reader;
-        
+
         if (!reader.parse(request_json, request_data)) {
             std::cerr << "Failed to parse JSON request" << std::endl;
             return;
         }
 
+        std::string method = request_data["method"].asString();
+        if (method != "POST") {
+            std::cout << "Skipping non-POST request: " << method << std::endl;
+            return;
+        }
+
         std::string request_id = request_data["id"].asString();
         std::string path = request_data["path"].asString();
+        std::string body = request_data["body"].asString();
 
-        std::cout << "Processing request: " << request_id << " path: " << path << std::endl;
+        std::cout << "Processing POST request: " << request_id << " path: " << path << std::endl;
 
         // Call L2 server
-        std::string l2_response = call_l2_server(path);
+        std::string l2_response = call_l2_server(path, body);
 
         // Prepare response for Redis
         Json::Value response_data;
         response_data["status_code"] = 200;
         response_data["headers"]["Content-Type"] = "application/json";
-        
-        Json::Value body;
-        body["message"] = "Processed by C++ L2 Worker";
-        body["language"] = "C++";
-        body["request_id"] = request_id;
-        body["l2_response"] = l2_response;
-        body["timestamp"] = (Json::Int64)std::chrono::duration_cast<std::chrono::seconds>(
+
+        Json::Value response_body;
+        response_body["message"] = "Processed by C++ L2 Worker";
+        response_body["language"] = "C++";
+        response_body["request_id"] = request_id;
+        response_body["l2_response"] = l2_response;
+        response_body["timestamp"] = (Json::Int64)std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count();
-        
-        response_data["body"] = body;
+
+        response_data["body"] = response_body;
 
         // Store response in Redis
         Json::StreamWriterBuilder writer;

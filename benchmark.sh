@@ -4,7 +4,7 @@
 
 # Default values
 DEFAULT_URL="http://localhost:8888/"
-DEFAULT_REQUESTS=1000
+DEFAULT_REQUESTS=10
 DEFAULT_CONCURRENT=500
 
 # Colors for output
@@ -75,10 +75,10 @@ echo "Concurrent requests: $CONCURRENT"
 echo "----------------------------------------"
 
 # Run Apache Bench
-echo "Running: ab -n $REQUESTS -c $CONCURRENT -m POST -g benchmark.tsv $URL"
+echo "Running: ab -n $REQUESTS -c $CONCURRENT -m POST $URL"
 echo ""
 
-ab -n "$REQUESTS" -c "$CONCURRENT" -m POST -g benchmark.tsv "$URL"
+ab -n "$REQUESTS" -c "$CONCURRENT" -m POST "$URL"
 
 # Check the exit code
 AB_EXIT_CODE=$?
