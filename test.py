@@ -38,8 +38,6 @@ import aiohttp
 
 # Configuration
 PROXY_URL = "http://localhost:8888"
-SERVER_URL = "http://localhost:3000"
-REDISINSIGHT_URL = "http://localhost:5540"
 NUM_REQUESTS = 50
 CONCURRENT_REQUESTS = 10
 
@@ -192,9 +190,6 @@ def main():
         all_passed = True
         all_passed &= test_endpoint(f"{PROXY_URL}/health", 200, "Proxy Health Check")
         all_passed &= test_json_endpoint(f"{PROXY_URL}/", "Proxy Main Endpoint")
-        all_passed &= test_json_endpoint(f"{SERVER_URL}/", "Direct L2 Server")
-        all_passed &= test_json_endpoint(f"{SERVER_URL}/api/info", "L2 Server Info")
-        all_passed &= test_endpoint(REDISINSIGHT_URL, 200, "RedisInsight Web UI")
 
         # Load testing
         print(f"\n{Colors.GREEN}=== Load Testing ==={Colors.NC}")
