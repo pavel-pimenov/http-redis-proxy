@@ -4,8 +4,8 @@
 
 # Default values
 DEFAULT_URL="http://localhost:8888/"
-DEFAULT_REQUESTS=10
-DEFAULT_CONCURRENT=500
+DEFAULT_REQUESTS=5000
+DEFAULT_CONCURRENT=100
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -74,6 +74,11 @@ echo "Total requests: $REQUESTS"
 echo "Concurrent requests: $CONCURRENT"
 echo "----------------------------------------"
 
+if [ ! -f "test_payload.json" ]; then
+    echo -e "${RED}Error: test_payload.json not found in current directory.${NC}"
+    exit 1
+fi
+
 # Run Apache Bench
 echo "Running: ab -n $REQUESTS -c $CONCURRENT -p test_payload.json -T application/json $URL"
 echo ""
@@ -86,11 +91,6 @@ AB_EXIT_CODE=$?
 if [ $AB_EXIT_CODE -eq 0 ]; then
     echo -e "\n${GREEN}Benchmark completed successfully!${NC}"
 
-    # Check if TSV file was created and has content
-    if [ -f benchmark.tsv ] && [ -s benchmark.tsv ]; then
-        echo -e "${YELLOW}Response time data saved to benchmark.tsv${NC}"
-        echo "You can analyze it with gnuplot or other tools."
-    fi
 else
     echo -e "\n${RED}Benchmark failed with exit code $AB_EXIT_CODE${NC}"
     exit 1

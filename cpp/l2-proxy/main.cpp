@@ -191,8 +191,10 @@ int main() {
 
      const char *options[] = {
 	  "listening_ports", "8888",
-	  "num_threads", "10",
+	  "num_threads", "32",
 	  "enable_directory_listing", "no",
+//      "max_connections", "1024",
+      "request_timeout_ms", "30000",
 	  0 };
 	std::vector<std::string> cpp_options;
 	for (int i = 0; i < (sizeof(options) / sizeof(options[0]) - 1); i++) {
