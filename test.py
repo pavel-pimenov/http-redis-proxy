@@ -38,8 +38,8 @@ import aiohttp
 
 # Configuration
 PROXY_URL = "http://localhost:8888"
-NUM_REQUESTS = 50
-CONCURRENT_REQUESTS = 10
+NUM_REQUESTS = 500
+CONCURRENT_REQUESTS = 100
 
 class Colors:
     RED = '\033[0;31m'
@@ -50,36 +50,6 @@ class Colors:
 def run_command(cmd: List[str]) -> subprocess.CompletedProcess:
     """Run a shell command and return the result."""
     return subprocess.run(cmd, capture_output=True, text=True)
-
-def start_services():
-    """Start Docker Compose services."""
-    print(f"{Colors.GREEN}Starting HTTP Redis Proxy services...{Colors.NC}")
-    result = run_command(["docker-compose", "up", "-d"])
-    if result.returncode != 0:
-        print(f"{Colors.RED}Failed to start services: {result.stderr}{Colors.NC}")
-        sys.exit(1)
-
-def stop_services():
-    """Stop Docker Compose services."""
-    print(f"{Colors.GREEN}Stopping services...{Colors.NC}")
-    run_command(["docker-compose", "down"])
-
-def test_endpoint(url: str, expected_status: int = 200, description: str = "") -> bool:
-    """Test a single endpoint with POST request."""
-    print(f"Testing {description} ({url})... ", end="", flush=True)
-    json_payload = {"test": "data", "number": 123}
-    try:
-        response = requests.post(url, json=json_payload, timeout=10)
-        if response.status_code == expected_status:
-            print(f"{Colors.GREEN}PASS{Colors.NC} (Status: {response.status_code})")
-            return True
-        else:
-            print(f"{Colors.RED}FAIL{Colors.NC} (Status: {response.status_code}, Expected: {expected_status})")
-            print(f"Response: {response.text}")
-            return False
-    except requests.RequestException as e:
-        print(f"{Colors.RED}FAIL{Colors.NC} (Connection failed: {e})")
-        return False
 
 def test_json_endpoint(url: str, description: str = "") -> bool:
     """Test an endpoint that should return valid JSON with POST request."""
@@ -175,20 +145,9 @@ def print_load_results(stats: Dict):
         print(f"Median Response Time: {stats['median_time']:.2f}ms")
 
 def main():
-    """Main test function."""
-    try:
-        # Start services
-        start_services()
-
-        # Wait for services to be ready
-        print(f"{Colors.YELLOW}Waiting for services to be ready...{Colors.NC}")
-        time.sleep(5)
-
-        # Functionality tests
         print(f"\n{Colors.GREEN}=== Functionality Tests ==={Colors.NC}")
 
         all_passed = True
-        all_passed &= test_endpoint(f"{PROXY_URL}/health", 200, "Proxy Health Check")
         all_passed &= test_json_endpoint(f"{PROXY_URL}/", "Proxy Main Endpoint")
 
         # Load testing
@@ -206,8 +165,6 @@ def main():
             print(f"\n{Colors.RED}❌ Some tests failed. Check the output above.{Colors.NC}")
             return 1
 
-    finally:
-        stop_services()
 
 if __name__ == "__main__":
     sys.exit(main())

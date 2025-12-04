@@ -5,6 +5,10 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <atomic>
+#include <csignal>
+
+std::atomic<bool> shutdown_flag(false);
 
 class L2Worker {
 private:
@@ -89,7 +93,7 @@ public:
         std::string path = request_data["path"].asString();
         std::string body = request_data["body"].asString();
 
-        std::cout << "Processing POST request: " << request_id << " path: " << path << std::endl;
+        std::cout << "Processing POST request: " << request_id << " path: " << path << "body:" << body << std::endl;
 
         // Call L2 server
         std::string l2_response = call_l2_server(path, body);
@@ -113,7 +117,7 @@ public:
         Json::StreamWriterBuilder writer;
         std::string response_str = Json::writeString(writer, response_data);
         
-        redisReply* reply = (redisReply*)redisCommand(redis, "SETEX http:response:%s 60 %s", 
+        redisReply* reply = (redisReply*)redisCommand(redis, "SETEX http:response:%s 60 %s",
                                                      request_id.c_str(), response_str.c_str());
         if (reply) freeReplyObject(reply);
     }
@@ -121,7 +125,7 @@ public:
     void run() {
         std::cout << "C++ L2 Worker started. Waiting for requests..." << std::endl;
 
-        while (true) {
+        while (!shutdown_flag) {
             redisReply* reply = (redisReply*)redisCommand(redis, "BLPOP http:requests 10");
 
             if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements == 2) {
@@ -133,12 +137,18 @@ public:
             }
 
             if (reply) freeReplyObject(reply);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            // std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
+
+        std::cout << "Shutting down gracefully..." << std::endl;
     }
 };
 
 int main() {
+    // Set up signal handlers for graceful shutdown
+    std::signal(SIGTERM, [](int){ shutdown_flag = true; });
+    std::signal(SIGINT, [](int){ shutdown_flag = true; });
+
     std::string redis_host = "valkey";
     int redis_port = 6379;
     std::string l2_server_url = "http://l2-server:3000";
