@@ -3,12 +3,20 @@
 #include <iomanip>
 #include <chrono>
 #include <curl/curl.h>
+#include <iostream>
 #include "nlohmann/json.hpp"
 
 class TraceLogger {
+
 public:
     TraceLogger(const std::string& endpoint, const std::string& auth)
-        : oo_trace_url(endpoint), basic_auth(auth) {}
+        : oo_trace_url(endpoint), basic_auth(auth) {
+        curl_global_init(CURL_GLOBAL_ALL); // Инициализация libcurl (вызывать один раз в программе)
+    }
+
+    ~TraceLogger() {
+        // curl_global_cleanup(); // Вызывать только при завершении всей программы!
+    }
 
     std::string generate_trace_id() {
         return random_hex(32);
@@ -28,6 +36,19 @@ public:
         const std::string& service_name,
         const nlohmann::json& attributes = {}
     ) {
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            std::cerr << "Failed to initialize curl for trace send\n";
+            return;
+        }
+
+        // Настройка параметров
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 3L);
+        curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
+        curl_easy_setopt(curl, CURLOPT_FORBID_REUSE, 0L);
+        curl_easy_setopt(curl, CURLOPT_FRESH_CONNECT, 0L);
+
         nlohmann::json span = {
             {"trace_id", trace_id},
             {"span_id", span_id},
@@ -40,29 +61,31 @@ public:
         };
 
         nlohmann::json payload = nlohmann::json::array({span});
-
-        // Отправка через libcurl (аналогично логам)
-        CURL* curl = curl_easy_init();
-        if (!curl) return;
-
-        struct curl_slist* headers = nullptr;
-        headers = curl_slist_append(headers, "Content-Type: application/json");
-        headers = curl_slist_append(headers, ("Authorization: Basic " + basic_auth).c_str());
-
         std::string payload_str = payload.dump();
 
+        // Формируем заголовки (динамически, т.к. содержат basic_auth)
+        struct curl_slist* headers = nullptr;
+        headers = curl_slist_append(headers, "Content-Type: application/json");
+        std::string auth_header = "Authorization: Basic " + basic_auth;
+        headers = curl_slist_append(headers, auth_header.c_str());
+
+        // Устанавливаем параметры для этого запроса
         curl_easy_setopt(curl, CURLOPT_URL, oo_trace_url.c_str());
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload_str.c_str());
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, payload_str.size());
-        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(payload_str.size()));
 
+        // Выполняем запрос
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
-            std::cerr << "Trace send failed: " << curl_easy_strerror(res) << " (" << oo_trace_url << ")"<< "\n";
+            std::cerr << "Trace send failed: " << curl_easy_strerror(res)
+                      << " (" << oo_trace_url << ")\n";
         }
 
+        // Освобождаем заголовки
         curl_slist_free_all(headers);
+
+        // Освобождаем curl
         curl_easy_cleanup(curl);
     }
 
@@ -89,7 +112,6 @@ public:
             attrs["request.id"] = request_id;
         }
 
-        // Merge additional attributes
         for (auto& el : additional_attributes.items()) {
             attrs[el.key()] = el.value();
         }
@@ -97,7 +119,7 @@ public:
         send_span(
             trace_id,
             span_id,
-            "", // root span
+            "",
             "HTTP " + method + " " + url,
             start_us,
             end_us,
@@ -111,9 +133,10 @@ private:
     std::string basic_auth;
 
     std::string random_hex(size_t len) {
-        static std::random_device rd;
-        static std::mt19937 gen(rd());
-        static std::uniform_int_distribution<> dis(0, 15);
+        thread_local std::random_device rd;
+        thread_local std::mt19937 gen(rd());
+        thread_local std::uniform_int_distribution<> dis(0, 15);
+
         std::stringstream ss;
         ss << std::hex << std::setfill('0');
         for (size_t i = 0; i < len; ++i) {
@@ -122,5 +145,3 @@ private:
         return ss.str();
     }
 };
-
-

@@ -4,7 +4,7 @@
 
 # Default values
 DEFAULT_URL="http://localhost:8888/"
-DEFAULT_REQUESTS=100
+DEFAULT_REQUESTS=1000
 DEFAULT_CONCURRENT=100
 
 # Colors for output

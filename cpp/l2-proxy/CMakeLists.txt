@@ -8,17 +8,11 @@ find_package(CURL REQUIRED)
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
 find_library(HIREDIS_LIBRARY hiredis REQUIRED)
 
- # TODO
- #sqlite/sqlite3x_command.cpp
- #sqlite/sqlite3x_connection.cpp
- #sqlite/sqlite3x_reader.cpp
- #sqlite/sqlite3x_transaction.cpp
- #sqlite/sqlite3.c
-
+ 
 # Add executable
 add_executable(l2-proxy
-main.cpp
-jsoncpp/jsoncpp.cpp
+ main.cpp
+ jsoncpp/jsoncpp.cpp
  prometheus-cpp/pull/src/basic_auth.cc
  prometheus-cpp/pull/src/endpoint.cc
  prometheus-cpp/pull/src/exposer.cc
