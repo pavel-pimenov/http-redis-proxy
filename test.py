@@ -7,10 +7,13 @@ Includes functionality verification and load testing
 import subprocess
 import time
 import json
+import random
+import string
 from typing import List, Tuple, Dict
 import statistics
 import sys
 import os
+import argparse
 
 # Check dependencies
 def check_dependencies():
@@ -40,12 +43,42 @@ import aiohttp
 PROXY_URL = "http://localhost:8888"
 NUM_REQUESTS = 500
 CONCURRENT_REQUESTS = 100
+MIN_PAYLOAD_SIZE = 200  # bytes
+MAX_PAYLOAD_SIZE = 1000000  # 1 MB
 
 class Colors:
     RED = '\033[0;31m'
     GREEN = '\033[0;32m'
     YELLOW = '\033[1;33m'
     NC = '\033[0m'  # No Color
+
+def generate_random_json_payload(size_bytes: int) -> dict:
+    """Generate a random JSON payload of approximately the given size in bytes."""
+    if size_bytes < 50:  # minimum for a basic JSON
+        return {"data": "x" * (size_bytes - 10)}
+
+    # Start with a basic structure
+    payload = {"data": ""}
+
+    # Keep adding random data until we reach the desired size
+    while len(json.dumps(payload).encode('utf-8')) < size_bytes:
+        # Add random key-value pairs or extend existing data
+        key = ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+        value = ''.join(random.choices(string.ascii_letters + string.digits + ' ', k=random.randint(10, 100)))
+        payload[key] = value
+
+        # If still small, extend the data field
+        if len(json.dumps(payload).encode('utf-8')) < size_bytes * 0.8:
+            payload["data"] += ''.join(random.choices(string.ascii_letters + string.digits + ' ', k=1000))
+
+    # Trim if overshot
+    current_size = len(json.dumps(payload).encode('utf-8'))
+    if current_size > size_bytes:
+        excess = current_size - size_bytes
+        if "data" in payload and isinstance(payload["data"], str):
+            payload["data"] = payload["data"][:-excess] if len(payload["data"]) > excess else ""
+
+    return payload
 
 def run_command(cmd: List[str]) -> subprocess.CompletedProcess:
     """Run a shell command and return the result."""
@@ -54,7 +87,7 @@ def run_command(cmd: List[str]) -> subprocess.CompletedProcess:
 def test_json_endpoint(url: str, description: str = "") -> bool:
     """Test an endpoint that should return valid JSON with POST request."""
     print(f"Testing {description} ({url})... ", end="", flush=True)
-    json_payload = {"test": "data", "number": 123}
+    json_payload = generate_random_json_payload(500)  # Fixed size for functionality test
     try:
         response = requests.post(url, json=json_payload, timeout=10)
         if response.status_code == 200:
@@ -76,7 +109,8 @@ def test_json_endpoint(url: str, description: str = "") -> bool:
 async def make_async_request(session: aiohttp.ClientSession, request_id: int) -> Tuple[int, float, bool]:
     """Make a single async POST request with JSON payload and return timing info."""
     start_time = time.time()
-    json_payload = {"test": "data", "number": 123}
+    size = random.randint(MIN_PAYLOAD_SIZE, MAX_PAYLOAD_SIZE)
+    json_payload = generate_random_json_payload(size)
     try:
         async with session.post(PROXY_URL, json=json_payload) as response:
             end_time = time.time()
@@ -145,25 +179,37 @@ def print_load_results(stats: Dict):
         print(f"Median Response Time: {stats['median_time']:.2f}ms")
 
 def main():
-        print(f"\n{Colors.GREEN}=== Functionality Tests ==={Colors.NC}")
+    global MIN_PAYLOAD_SIZE, MAX_PAYLOAD_SIZE
 
-        all_passed = True
-        all_passed &= test_json_endpoint(f"{PROXY_URL}/", "Proxy Main Endpoint")
+    parser = argparse.ArgumentParser(description="Test script for HTTP Redis Proxy system")
+    parser.add_argument('--min-size', type=int, default=200, help='Minimum payload size in bytes (default: 200)')
+    parser.add_argument('--max-size', type=int, default=1000000, help='Maximum payload size in bytes (default: 1000000)')
 
-        # Load testing
-        print(f"\n{Colors.GREEN}=== Load Testing ==={Colors.NC}")
-        stats = asyncio.run(run_load_test())
-        print_load_results(stats)
+    args = parser.parse_args()
+    MIN_PAYLOAD_SIZE = args.min_size
+    MAX_PAYLOAD_SIZE = args.max_size
 
-        # Determine overall success
-        load_passed = stats['success_rate'] >= 95.0 and stats['failed_requests'] == 0
+    print(f"Using payload sizes from {MIN_PAYLOAD_SIZE} to {MAX_PAYLOAD_SIZE} bytes")
 
-        if all_passed and load_passed:
-            print(f"\n{Colors.GREEN}✅ All tests passed! System is working correctly.{Colors.NC}")
-            return 0
-        else:
-            print(f"\n{Colors.RED}❌ Some tests failed. Check the output above.{Colors.NC}")
-            return 1
+    print(f"\n{Colors.GREEN}=== Functionality Tests ==={Colors.NC}")
+
+    all_passed = True
+    all_passed &= test_json_endpoint(f"{PROXY_URL}/", "Proxy Main Endpoint")
+
+    # Load testing
+    print(f"\n{Colors.GREEN}=== Load Testing ==={Colors.NC}")
+    stats = asyncio.run(run_load_test())
+    print_load_results(stats)
+
+    # Determine overall success
+    load_passed = stats['success_rate'] >= 95.0 and stats['failed_requests'] == 0
+
+    if all_passed and load_passed:
+        print(f"\n{Colors.GREEN}✅ All tests passed! System is working correctly.{Colors.NC}")
+        return 0
+    else:
+        print(f"\n{Colors.RED}❌ Some tests failed. Check the output above.{Colors.NC}")
+        return 1
 
 
 if __name__ == "__main__":

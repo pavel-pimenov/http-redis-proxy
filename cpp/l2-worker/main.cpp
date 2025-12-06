@@ -43,12 +43,24 @@ auto& l2_worker_l2_errors_total = prometheus::BuildCounter()
     .Help("Total number of L2 server call errors in worker")
     .Register(*registry);
 
+auto& l2_worker_bytes_received_total = prometheus::BuildCounter()
+    .Name("l2_worker_bytes_received_total")
+    .Help("Total number of bytes received from Redis")
+    .Register(*registry);
+
+auto& l2_worker_bytes_sent_total = prometheus::BuildCounter()
+    .Name("l2_worker_bytes_sent_total")
+    .Help("Total number of bytes sent to Redis")
+    .Register(*registry);
+
 // Counter instances
 prometheus::Counter& requests_processed_counter = l2_worker_requests_processed_total.Add({});
 prometheus::Counter& redis_operations_counter = l2_worker_redis_operations_total.Add({});
 prometheus::Counter& l2_calls_counter = l2_worker_l2_calls_total.Add({});
 prometheus::Counter& redis_errors_counter = l2_worker_redis_errors_total.Add({});
 prometheus::Counter& l2_errors_counter = l2_worker_l2_errors_total.Add({});
+prometheus::Counter& bytes_received_counter = l2_worker_bytes_received_total.Add({});
+prometheus::Counter& bytes_sent_counter = l2_worker_bytes_sent_total.Add({});
 
 class L2Worker {
 private:
@@ -119,6 +131,7 @@ public:
 
     void process_request(const std::string& request_json) {
         requests_processed_counter.Increment();
+        bytes_received_counter.Increment(request_json.size());
 
         Json::Value request_data;
         Json::Reader reader;
@@ -161,6 +174,7 @@ public:
         // Store response in Redis
         Json::StreamWriterBuilder writer;
         std::string response_str = Json::writeString(writer, response_data);
+        bytes_sent_counter.Increment(response_str.size());
 
         redis_operations_counter.Increment();
         redisReply* reply = (redisReply*)redisCommand(redis, "SETEX http:response:%s 60 %s",

@@ -46,11 +46,23 @@ auto& l2_proxy_redis_errors_total = prometheus::BuildCounter()
     .Help("Total number of Redis operation errors")
     .Register(*registry);
 
+auto& l2_proxy_bytes_received_total = prometheus::BuildCounter()
+    .Name("l2_proxy_bytes_received_total")
+    .Help("Total number of bytes received from clients")
+    .Register(*registry);
+
+auto& l2_proxy_bytes_sent_total = prometheus::BuildCounter()
+    .Name("l2_proxy_bytes_sent_total")
+    .Help("Total number of bytes sent to clients")
+    .Register(*registry);
+
 // Counter instances
 prometheus::Counter& client_requests_counter = l2_proxy_client_requests_total.Add({});
 prometheus::Counter& redis_requests_counter = l2_proxy_redis_requests_total.Add({});
 prometheus::Counter& client_errors_counter = l2_proxy_client_request_errors_total.Add({});
 prometheus::Counter& redis_errors_counter = l2_proxy_redis_errors_total.Add({});
+prometheus::Counter& bytes_received_counter = l2_proxy_bytes_received_total.Add({});
+prometheus::Counter& bytes_sent_counter = l2_proxy_bytes_sent_total.Add({});
 
 void signal_handler(int signum) {
     std::cout << "Received signal " << signum << ", exiting..." << std::endl;
@@ -211,6 +223,7 @@ public:
             }
             delete[] buffer;
         }
+        bytes_received_counter.Increment(body.size());
         return handle_request(server, conn, "POST", body);
     }
 
@@ -281,6 +294,7 @@ public:
         std::cout << "response" << response << std::endl;
 
         std::string response_json = utility::conversions::to_utf8string(response.serialize());
+        bytes_sent_counter.Increment(response_json.size());
         mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response_json.c_str());
         return true;
     }

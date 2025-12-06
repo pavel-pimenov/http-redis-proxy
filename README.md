@@ -107,3 +107,37 @@ The service has been built successfully and is ready for deployment. The metrics
 The implementation has been successfully compiled and is ready for deployment. The metrics will be available at `http://0.0.0.0:9091/metrics` once the worker is running.
 
 **
+
+I've successfully added the requested functionality to `test.py`. Here's what was implemented:
+
+## Changes Made:
+
+1. __Added command-line options__ for specifying JSON payload size range:
+
+   - `--min-size`: Minimum payload size in bytes (default: 200)
+   - `--max-size`: Maximum payload size in bytes (default: 1,000,000)
+
+2. __Created a function__ `generate_random_json_payload(size_bytes)` that generates random JSON payloads of approximately the specified size in bytes.
+
+3. __Modified payload generation__:
+
+   - Functionality test uses a fixed 500-byte payload
+   - Load test requests use random payload sizes between the specified min and max values
+
+4. __Added necessary imports__: `argparse`, `random`, `string`
+
+## Usage:
+
+Run the script with default sizes (200 bytes to 1 MB):
+
+```bash
+python test.py
+```
+
+Specify custom size range:
+
+```bash
+python test.py --min-size 500 --max-size 500000
+```
+
+The script now generates random JSON messages with varying sizes within the specified range for load testing, while maintaining the original functionality for basic endpoint testing.
