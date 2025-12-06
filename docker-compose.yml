@@ -5,6 +5,7 @@ services:
       - "6379:6379"
     volumes:
       - ./valkey.conf:/etc/valkey/valkey.conf
+#      - valkey_data:/data
     command: valkey-server /etc/valkey/valkey.conf
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
@@ -33,6 +34,8 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+    environment:
+      - USE_SEQUENTIAL_REQUEST_ID=true
     networks:
       - l2_network
     labels:
@@ -84,3 +87,6 @@ networks:
     ipam:
       config:
         - subnet: 172.28.0.0/16
+
+# volumes:
+#   valkey_data:

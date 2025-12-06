@@ -7,6 +7,8 @@
 #include <ctime>
 #include <unistd.h>
 #include <mutex>
+#include <cstdlib>
+#include <csignal>
 
 #include "CivetServer.h"
 #include <hiredis/hiredis.h>
@@ -15,6 +17,11 @@
 using namespace web;
 
 static int g_exit_flag = 0;
+
+void signal_handler(int signum) {
+    std::cout << "Received signal " << signum << ", exiting..." << std::endl;
+    g_exit_flag = 1;
+}
 
 class HealthHandler : public CivetHandler {
 private:
@@ -87,6 +94,8 @@ class RequestHandler : public CivetHandler {
 private:
     redisContext* redis;
     std::mutex redis_mutex;
+    bool use_sequential_id = true;
+    long long request_id_counter = 0;
 
     std::string generate_uuid() {
         std::random_device rd;
@@ -100,8 +109,40 @@ private:
         return ss.str();
     }
 
+    std::string generate_sequential_id() {
+        std::lock_guard<std::mutex> lock(redis_mutex);
+        request_id_counter++;
+        return std::to_string(request_id_counter);
+    }
+
+    void save_counter() {
+        std::lock_guard<std::mutex> lock(redis_mutex);
+        redisReply* reply = (redisReply*)redisCommand(redis, "SET request_id_counter %lld", request_id_counter);
+        if (reply) freeReplyObject(reply);
+    }
+
 public:
-    RequestHandler(redisContext* r) : redis(r) {}
+    RequestHandler(redisContext* r) : redis(r), request_id_counter(0) {
+        // const char* env = std::getenv("USE_SEQUENTIAL_REQUEST_ID");
+        // use_sequential_id = env && std::string(env) == "true";
+
+        // Load counter from Redis
+        std::lock_guard<std::mutex> lock(redis_mutex);
+        redisReply* reply = (redisReply*)redisCommand(redis, "GET request_id_counter");
+        if (reply && reply->type == REDIS_REPLY_STRING) {
+            request_id_counter = atoll(reply->str);
+        } else if (reply && reply->type == REDIS_REPLY_NIL) {
+            request_id_counter = 0;
+        } else {
+            std::cerr << "Failed to load request_id_counter from Redis, starting from 0" << std::endl;
+            request_id_counter = 0;
+        }
+        if (reply) freeReplyObject(reply);
+    }
+
+    ~RequestHandler() {
+        save_counter();
+    }
 
     bool handleGet(CivetServer *server, struct mg_connection *conn) {
         return handle_request(server, conn, "GET", "");
@@ -126,7 +167,7 @@ public:
         const struct mg_request_info *req_info = mg_get_request_info(conn);
         std::string path = req_info->request_uri ? req_info->request_uri : "/";
 
-        auto request_id = generate_uuid();
+        std::string request_id = use_sequential_id ? generate_sequential_id() : generate_uuid();
 
         // Prepare request data for Redis
         // std::string request_data = "{\"id\": \"" + request_id + "\", \"method\": \"" + method + "\", \"path\": \"" + path + "\"}";
@@ -185,6 +226,10 @@ int main() {
         return 1;
     }
 
+    // Register signal handler for graceful shutdown
+    std::signal(SIGTERM, signal_handler);
+    std::signal(SIGINT, signal_handler);
+
     HealthHandler health_handler(redis);
     RequestHandler request_handler(redis);
     StatsHandler stats_handler(redis);
@@ -205,7 +250,6 @@ int main() {
 
     try {
         CivetServer server(cpp_options);
-        // server.addHandler("/health", &health_handler);
         server.addHandler("/stats", &stats_handler);
         server.addHandler("/", &request_handler);
 
@@ -221,12 +265,6 @@ int main() {
         std::cout << "CivetException:" << e.what() << std::endl;
     }
 
-//   std::cout << "Press Enter to exit..." << std::endl;
-
-//    std::string line;
-//    std::getline(std::cin, line);
-
-    // Server will stop when going out of scope
     redisFree(redis);
 
     return 0;
