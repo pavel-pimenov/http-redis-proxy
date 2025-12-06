@@ -176,3 +176,42 @@ python3 test.py
 ```
 
 The detailed logging should reveal the exact point of hanging.
+
+I've successfully merged the l2-proxy and l2-worker projects into a single l2-service project. Here's what was accomplished:
+
+1. __Analyzed both projects__: Understood that l2-proxy acts as an HTTP server that queues requests to Redis, and l2-worker processes those requests by calling an external L2 server.
+
+2. __Combined main.cpp__: Created a single executable that checks the `MODE` environment variable to run either as "proxy" or "worker" mode.
+
+3. __Updated CMakeLists.txt__: Added CURL dependency, changed project name to l2-service, and updated executable name and linking.
+
+4. __Renamed directory__: Moved cpp/l2-proxy to cpp/l2-service.
+
+5. __Updated Dockerfile__: Added libcurl dependencies, changed executable name, exposed additional ports (9090 for proxy metrics, 9091 for worker metrics).
+
+6. __Removed l2-worker directory__: Cleaned up the old separate project.
+
+The merged project now uses a single binary that can be run in either mode by setting the `MODE` environment variable to "proxy" or "worker". The proxy mode listens on port 8888 and serves metrics on 9090, while worker mode processes requests and serves metrics on 9091.
+
+I've updated the docker-compose.yml to run the merged l2-service in two instances with the appropriate modes:
+
+- __l2-service-proxy__: Runs with `MODE=proxy`, exposes ports 8888 (HTTP) and 9090 (Prometheus metrics), and acts as the HTTP proxy that queues requests to Redis.
+
+- __l2-service-worker__: Runs with `MODE=worker`, exposes port 9091 (Prometheus metrics), and processes requests from the Redis queue by calling the l2-server.
+
+The services are properly configured with dependencies:
+
+- The proxy depends on Valkey being healthy
+- The worker depends on both Valkey and l2-server
+- Traefik is updated to depend on the proxy service
+
+Now you can run `docker-compose up` and it will start:
+
+- Valkey (Redis) on port 6379
+- l2-server (echo server) on port 3000
+- l2-service-proxy on ports 8888/9090
+- l2-service-worker on port 9091
+- RedisInsight on port 5540
+- Traefik on port 443
+
+The system will work as before: HTTP requests to port 8888 get queued, processed by the worker, and sent to the l2-server.

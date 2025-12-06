@@ -3,6 +3,7 @@ project(l2-proxy)
 
 # Find required packages
 find_package(OpenSSL REQUIRED)
+find_package(CURL REQUIRED)
 
 # Find hiredis manually
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
@@ -27,7 +28,7 @@ find_library(HIREDIS_LIBRARY hiredis REQUIRED)
 
 
 # Add executable
-add_executable(l2-proxy 
+add_executable(l2-proxy
 main.cpp
 jsoncpp/jsoncpp.cpp
  prometheus-cpp/pull/src/basic_auth.cc
@@ -58,7 +59,7 @@ target_include_directories(l2-proxy PRIVATE ${HIREDIS_INCLUDE_DIR})
 target_include_directories(l2-proxy PRIVATE ${SOURCE_DIR}/include)
 
 # Link libraries
-target_link_libraries(l2-proxy PRIVATE ${HIREDIS_LIBRARY} OpenSSL::SSL OpenSSL::Crypto)
+target_link_libraries(l2-proxy PRIVATE ${HIREDIS_LIBRARY} OpenSSL::SSL OpenSSL::Crypto CURL::libcurl)
 
 include_directories(prometheus-cpp/core/include)
 include_directories(prometheus-cpp/include)

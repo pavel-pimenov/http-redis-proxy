@@ -27,14 +27,16 @@ services:
     networks:
       - l2_network
 
-  l2-proxy:
+  l2-service-proxy:
     build: ./cpp/l2-proxy
     ports:
       - "8888:8888"
+      - "9090:9090"
     depends_on:
       valkey:
         condition: service_healthy
     environment:
+      - MODE=proxy
       - USE_SEQUENTIAL_REQUEST_ID=true
     networks:
       - l2_network
@@ -45,11 +47,15 @@ services:
       - "traefik.http.routers.l2proxy.service=l2proxy"
       - "traefik.http.services.l2proxy.loadbalancer.server.port=8888"
 
-  l2-worker:
-    build: ./cpp/l2-worker
+  l2-service-worker:
+    build: ./cpp/l2-proxy
+    ports:
+      - "9091:9091"
     depends_on:
       - valkey
       - l2-server
+    environment:
+      - MODE=worker
     networks:
       - l2_network
 
@@ -77,7 +83,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.websecure.address=:443"
     depends_on:
-      - l2-proxy
+      - l2-service-proxy
     networks:
       - l2_network
 

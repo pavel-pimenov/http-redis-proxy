@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     libhiredis-dev \
     libssl-dev \
+    libcurl4-openssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -19,9 +20,10 @@ FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y \
     libhiredis1.1.0 \
     libssl3t64 \
+    libcurl4t64 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /root/
 COPY --from=builder /app/build/l2-proxy .
-EXPOSE 8888
+EXPOSE 8888 9090 9091
 CMD ["./l2-proxy"]
