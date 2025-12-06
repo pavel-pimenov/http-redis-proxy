@@ -4,21 +4,20 @@ export OPENOBSERVE_URL=localhost
 export OPENOBSERVE_LOGIN=admin@example.com
 export OPENOBSERVE_PASSWORD=admin
 
-curl -u 'admin@example.com:securepassword' \
+NOW_US=$(($(date +%s) * 1000000 + $(date +%N) / 1000))
+curl -u 'admin@example.com:admin' \
   -H "Content-Type: application/json" \
-  -d '[{
-    "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
-    "span_id": "00f067aa0ba902b7",
-    "parent_span_id": "",
-    "name": "Test Span",
-    "start_time": 1700000000000000,
-    "end_time": 1700000000123456,
-    "service_name": "test-service",
-    "attributes": {"test": "true"}
-  }]' \
+  -d "[{
+    \"trace_id\": \"$(openssl rand -hex 16)\",
+    \"span_id\": \"$(openssl rand -hex 8)\",
+    \"name\": \"Manual Test\",
+    \"start_time\": $((NOW_US - 10000)),
+    \"end_time\": $NOW_US,
+    \"service_name\": \"manual\",
+    \"attributes\": {}
+  }]" \
   http://localhost:5080/api/default/traces/_json
   
-
 docker compose down
 docker compose build
 docker compose up --remove-orphans

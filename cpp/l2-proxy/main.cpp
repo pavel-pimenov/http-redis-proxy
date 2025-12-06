@@ -86,7 +86,7 @@ void init_tracer() {
         return;
     }
 
-    std::string endpoint = std::string(openobserve_url) + "/api/default/traces/_json";
+    std::string endpoint = std::string(openobserve_url) + "/api/default/http_traces/_json";
 
     std::string login = openobserve_login ? std::string(openobserve_login) : "admin";
     std::string password = openobserve_password ? std::string(openobserve_password) : "admin";
@@ -357,8 +357,14 @@ public:
         response["message"] = "Processed by C++ DMZ Proxy";
         response["request_id"] = request_id;
         response["language"] = "C++";
-        response["timestamp"] = (Json::Int64)std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+
+        // Получаем timestamp в микросекундах UTC (стандарт для OpenObserve)
+        auto now = std::chrono::system_clock::now();
+        auto timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            now.time_since_epoch()
+        ).count();
+        response["timestamp"] = (Json::Int64)timestamp_us; // ← микросекунды UTC
+
         std::cout << "response" << response << std::endl;
 
         Json::StreamWriterBuilder writer;
@@ -589,8 +595,13 @@ public:
         response_body["language"] = "C++";
         response_body["request_id"] = request_id;
         response_body["l2_response"] = l2_response;
-        response_body["timestamp"] = (Json::Int64)std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
+        
+        // Получаем timestamp в микросекундах UTC (стандарт для OpenObserve)
+        auto now = std::chrono::system_clock::now();
+        auto timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            now.time_since_epoch()
+        ).count();
+        response_body["timestamp"] = (Json::Int64)timestamp_us; // ← микросекунды UTC
 
         response_data["body"] = response_body;
 

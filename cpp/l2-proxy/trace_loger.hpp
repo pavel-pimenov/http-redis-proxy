@@ -75,6 +75,8 @@ public:
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload_str.c_str());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(payload_str.size()));
 
+        std::cout << " TraceLoger-body:" << payload_str << std::endl;
+
         // Выполняем запрос
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
