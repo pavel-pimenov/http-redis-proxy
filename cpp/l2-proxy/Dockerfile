@@ -10,9 +10,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY CMakeLists.txt main.cpp ./
+COPY CMakeLists.txt main.cpp trace_loger.hpp ./
 COPY civetweb/ civetweb/
 COPY jsoncpp/ jsoncpp/
+COPY nlohmann/ nlohmann
 COPY prometheus-cpp/ prometheus-cpp/
 RUN mkdir build && cd build && cmake .. && make
 

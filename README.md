@@ -1,7 +1,9 @@
 # http-redis-proxy
 
-sudo apt install libhiredis-dev libmicrohttpd-dev libjsoncpp-dev libcurl4-openssl-dev python3-pip
+sudo apt install libhiredis-dev libmicrohttpd-dev libjsoncpp-dev libcurl4-openssl-dev python3-pip 
 sudo apt-get install apache2-utils
+
+# sudo apt-get install  opentelemetry-cpp-dev (only ubuntu 25.10)
 
 Perfect! The docker-compose.yml has been updated successfully:
 
@@ -215,3 +217,67 @@ Now you can run `docker-compose up` and it will start:
 - Traefik on port 443
 
 The system will work as before: HTTP requests to port 8888 get queued, processed by the worker, and sent to the l2-server.
+
+
+I've successfully added OpenObserve tracing integration to the http-redis-proxy project. Here's what was implemented:
+
+## Changes Made:
+
+### 1. __Dependencies Update__
+
+- Updated `CMakeLists.txt` to fetch OpenTelemetry C++ SDK v1.14.2 using FetchContent
+- Added OpenTelemetry libraries to the target link libraries
+- Updated `Dockerfile` to include protobuf and absl dependencies required by OpenTelemetry
+
+### 2. __Tracing Implementation__
+
+- Added OpenTelemetry initialization in `main.cpp` with `init_tracing()` function
+
+- Configured OTLP HTTP exporter to send traces to `http://localhost:5080/api/traces`
+
+- Implemented basic authentication using base64-encoded login:password from environment variables
+
+- Added tracing spans to key operations:
+
+  - Proxy: `handle_request` span for incoming HTTP requests
+  - Worker: `process_request` span for request processing
+
+### 3. __Environment Configuration__
+
+- Added environment variables to `docker-compose.yml` for both proxy and worker services:
+
+  - `OPENOBSERVE_URL=http://localhost:5080`
+  - `OPENOBSERVE_LOGIN=${OPENOBSERVE_LOGIN}`
+  - `OPENOBSERVE_PASSWORD=${OPENOBSERVE_PASSWORD}`
+
+### 4. __Asynchronous Operation__
+
+- Tracing is implemented asynchronously using OpenTelemetry's default batch processor with background export threads
+- Does not block the main service threads during trace collection and export
+
+## Usage:
+
+Set the OpenObserve credentials in your environment before running:
+
+```bash
+export OPENOBSERVE_LOGIN=your_login
+export OPENOBSERVE_PASSWORD=your_password
+docker-compose up
+```
+
+docker run -v $PWD/data:/data -e ZO_DATA_DIR="/data" -p 5080:5080 -e ZO_ROOT_USER_EMAIL="root@example.com" -e ZO_ROOT_USER_PASSWORD="admin" o2cr.ai/openobserve/openobserve-enterprise:v0.20.2
+The traces will be sent to the OpenObserve instance at `localhost:5080` with proper authentication, allowing you to monitor request flows through the proxy and worker components without impacting performance.
+
+
+Perfect! The build completed successfully and quickly. I've successfully removed all OpenTelemetry dependencies and integrated the TraceLogger class for tracing HTTP requests via simple HTTP calls.
+
+## Summary of Changes:
+
+1. __Removed OpenTelemetry dependencies__ from CMakeLists.txt
+2. __Added nlohmann/json__ (header-only library) as a replacement
+3. __Removed all OpenTelemetry includes__ from main.cpp
+4. __Integrated TraceLogger__ with proper initialization using environment variables (OPENOBSERVE_URL, OPENOBSERVE_LOGIN, OPENOBSERVE_PASSWORD)
+5. __Replaced tracing logic__ in both proxy (`handle_request`) and worker (`process_request`) methods with TraceLogger usage
+6. __Verified fast build__ - the project now builds much quicker without the heavy OpenTelemetry dependency
+
+The TraceLogger sends traces to the configured OpenObserve endpoint with attributes like HTTP method, URL, status code, and request ID, exactly as requested. The build time has been significantly improved by removing the large OpenTelemetry library.

@@ -21,11 +21,80 @@
 #include <prometheus/exposer.h>
 #include <prometheus/counter.h>
 
+#include "nlohmann/json.hpp"
+#include "trace_loger.hpp"
+
+// Simple base64 encoding function
+std::string base64_encode(const std::string& input) {
+    const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    std::string encoded;
+    int i = 0;
+    int j = 0;
+    unsigned char char_array_3[3];
+    unsigned char char_array_4[4];
+
+    for (char c : input) {
+        char_array_3[i++] = c;
+        if (i == 3) {
+            char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+            char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+            char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+            char_array_4[3] = char_array_3[2] & 0x3f;
+
+            for (i = 0; i < 4; i++)
+                encoded += base64_chars[char_array_4[i]];
+            i = 0;
+        }
+    }
+
+    if (i) {
+        for (j = i; j < 3; j++)
+            char_array_3[j] = '\0';
+
+        char_array_4[0] = (char_array_3[0] & 0xfc) >> 2;
+        char_array_4[1] = ((char_array_3[0] & 0x03) << 4) + ((char_array_3[1] & 0xf0) >> 4);
+        char_array_4[2] = ((char_array_3[1] & 0x0f) << 2) + ((char_array_3[2] & 0xc0) >> 6);
+        char_array_4[3] = char_array_3[2] & 0x3f;
+
+        for (j = 0; j < i + 1; j++)
+            encoded += base64_chars[char_array_4[j]];
+
+        while (i++ < 3)
+            encoded += '=';
+    }
+
+    return encoded;
+}
+
+
+
 // Common variables
 std::atomic<bool> shutdown_flag(false);
 
 // Environment variable for mode
 const char* MODE_ENV = "MODE";
+
+// Initialize TraceLogger
+std::unique_ptr<TraceLogger> tracer;
+void init_tracer() {
+    const char* openobserve_url = std::getenv("OPENOBSERVE_URL");
+    const char* openobserve_login = std::getenv("OPENOBSERVE_LOGIN");
+    const char* openobserve_password = std::getenv("OPENOBSERVE_PASSWORD");
+
+    if (!openobserve_url) {
+        std::cerr << "OPENOBSERVE_URL not set, tracing disabled" << std::endl;
+        return;
+    }
+
+    std::string endpoint = std::string(openobserve_url) + "/api/default/traces/_json";
+
+    std::string login = openobserve_login ? std::string(openobserve_login) : "admin";
+    std::string password = openobserve_password ? std::string(openobserve_password) : "admin";
+    std::string credentials = login + ":" + password;
+    std::string auth = base64_encode(credentials);
+
+    tracer = std::make_unique<TraceLogger>(endpoint, auth);
+}
 
 // Prometheus registry for proxy
 std::shared_ptr<prometheus::Registry> proxy_registry = std::make_shared<prometheus::Registry>();
@@ -230,6 +299,10 @@ public:
     }
 
     bool handle_request(CivetServer *server, struct mg_connection *conn, const std::string& method, const std::string& body = "") {
+        auto start_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+
         proxy_client_requests_counter.Increment();
 
         const struct mg_request_info *req_info = mg_get_request_info(conn);
@@ -292,6 +365,16 @@ public:
         std::string response_json = Json::writeString(writer, response);
         proxy_bytes_sent_counter.Increment(response_json.size());
         mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response_json.c_str());
+
+        // Send tracing span
+        if (tracer) {
+            auto end_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()
+            ).count();
+
+            tracer->log_request(method, path, 200, start_us, end_us, "l2-proxy", request_id);
+        }
+
         return true;
     }
 };
@@ -466,6 +549,10 @@ public:
     }
 
     void process_request(const std::string& request_json) {
+        auto start_us = std::chrono::duration_cast<std::chrono::microseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+
         worker_requests_processed_counter.Increment();
         worker_bytes_received_counter.Increment(request_json.size());
 
@@ -519,6 +606,33 @@ public:
             worker_redis_errors_counter.Increment();
         }
         if (reply) freeReplyObject(reply);
+
+        // Send tracing span
+        if (tracer) {
+            auto end_us = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::system_clock::now().time_since_epoch()
+            ).count();
+
+            std::string trace_id = tracer->generate_trace_id();
+            std::string span_id = tracer->generate_span_id();
+
+            nlohmann::json attrs = {
+                {"request.id", request_id},
+                {"request.path", path},
+                {"request.method", method}
+            };
+
+            tracer->send_span(
+                trace_id,
+                span_id,
+                "", // root span
+                "process_request",
+                start_us,
+                end_us,
+                "l2-worker",
+                attrs
+            );
+        }
     }
 
     void run() {
@@ -574,6 +688,9 @@ void signal_handler(int signum) {
 int main() {
     std::signal(SIGTERM, signal_handler);
     std::signal(SIGINT, signal_handler);
+
+    // Initialize TraceLogger
+    init_tracer();
 
     const char* mode = std::getenv(MODE_ENV);
     if (!mode) {

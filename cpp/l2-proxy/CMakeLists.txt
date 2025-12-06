@@ -1,6 +1,5 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
 project(l2-proxy)
-
 # Find required packages
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
@@ -56,6 +55,8 @@ include_directories(prometheus-cpp/util/include)
 include_directories(prometheus-cpp/pull/include)
 include_directories(civetweb)
 include_directories(jsoncpp)
-include_directories(sqlite)
+include_directories(nlohmann)
+
+#include_directories(sqlite)
 
 target_link_libraries(l2-proxy PRIVATE ${HIREDIS_LIBRARY})

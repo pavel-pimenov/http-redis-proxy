@@ -15,10 +15,24 @@ services:
     networks:
       - l2_network
 
+  # openobserve:
+  #   image: ghcr.io/zincdb/openobserve:v0.10.8
+  #   ports:
+  #     - "5080:5080"
+  #   environment:
+  #     - ZO_ROOT_USER_EMAIL=${OPENOBSERVE_LOGIN}
+  #     - ZO_ROOT_USER_PASSWORD=${OPENOBSERVE_PASSWORD}
+  #   volumes:
+  #     - ./zo_data:/data
+  #   networks:
+  #     - l2_network
+
   l2-server:
     image: ealen/echo-server:latest
     ports:
       - "3000:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - PORT=8080
       - LOG_REQUESTS=true
@@ -35,9 +49,14 @@ services:
     depends_on:
       valkey:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - MODE=proxy
       - USE_SEQUENTIAL_REQUEST_ID=true
+      - OPENOBSERVE_URL=http://host.docker.internal:5080
+      - OPENOBSERVE_LOGIN=${OPENOBSERVE_LOGIN}
+      - OPENOBSERVE_PASSWORD=${OPENOBSERVE_PASSWORD}
     networks:
       - l2_network
     labels:
@@ -54,8 +73,13 @@ services:
     depends_on:
       - valkey
       - l2-server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"      
     environment:
       - MODE=worker
+      - OPENOBSERVE_URL=http://host.docker.internal:5080
+      - OPENOBSERVE_LOGIN=${OPENOBSERVE_LOGIN}
+      - OPENOBSERVE_PASSWORD=${OPENOBSERVE_PASSWORD}
     networks:
       - l2_network
 
