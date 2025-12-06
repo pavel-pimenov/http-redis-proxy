@@ -16,7 +16,41 @@
 #include <cpprest/json.h>
 using namespace web;
 
+#include <prometheus/registry.h>
+#include <prometheus/exposer.h>
+#include <prometheus/counter.h>
+
 static int g_exit_flag = 0;
+
+// Prometheus registry
+std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
+
+// Prometheus counters
+auto& l2_proxy_client_requests_total = prometheus::BuildCounter()
+    .Name("l2_proxy_client_requests_total")
+    .Help("Total number of client requests received")
+    .Register(*registry);
+
+auto& l2_proxy_redis_requests_total = prometheus::BuildCounter()
+    .Name("l2_proxy_redis_requests_total")
+    .Help("Total number of Redis operations performed")
+    .Register(*registry);
+
+auto& l2_proxy_client_request_errors_total = prometheus::BuildCounter()
+    .Name("l2_proxy_client_request_errors_total")
+    .Help("Total number of client request errors")
+    .Register(*registry);
+
+auto& l2_proxy_redis_errors_total = prometheus::BuildCounter()
+    .Name("l2_proxy_redis_errors_total")
+    .Help("Total number of Redis operation errors")
+    .Register(*registry);
+
+// Counter instances
+prometheus::Counter& client_requests_counter = l2_proxy_client_requests_total.Add({});
+prometheus::Counter& redis_requests_counter = l2_proxy_redis_requests_total.Add({});
+prometheus::Counter& client_errors_counter = l2_proxy_client_request_errors_total.Add({});
+prometheus::Counter& redis_errors_counter = l2_proxy_redis_errors_total.Add({});
 
 void signal_handler(int signum) {
     std::cout << "Received signal " << signum << ", exiting..." << std::endl;
@@ -39,9 +73,11 @@ public:
         }
 
         redisReply* reply = (redisReply*)redisCommand(redis, "PING");
+        redis_requests_counter.Increment();
         if (reply && reply->type == REDIS_REPLY_STATUS) {
             mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nOK");
         } else {
+            redis_errors_counter.Increment();
             mg_printf(conn, "HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\n\r\nRedis unavailable");
         }
         if (reply) freeReplyObject(reply);
@@ -65,7 +101,16 @@ public:
         }
 
         redisReply* writes_reply = (redisReply*)redisCommand(redis, "GET stats:redis_writes");
+        redis_requests_counter.Increment();
+        if (!(writes_reply && writes_reply->type == REDIS_REPLY_STRING)) {
+            redis_errors_counter.Increment();
+        }
+
         redisReply* reads_reply = (redisReply*)redisCommand(redis, "GET stats:redis_reads");
+        redis_requests_counter.Increment();
+        if (!(reads_reply && reads_reply->type == REDIS_REPLY_STRING)) {
+            redis_errors_counter.Increment();
+        }
 
         long long writes = 0;
         long long reads = 0;
@@ -118,6 +163,10 @@ private:
     void save_counter() {
         std::lock_guard<std::mutex> lock(redis_mutex);
         redisReply* reply = (redisReply*)redisCommand(redis, "SET request_id_counter %lld", request_id_counter);
+        redis_requests_counter.Increment();
+        if (!(reply && reply->type == REDIS_REPLY_STATUS)) {
+            redis_errors_counter.Increment();
+        }
         if (reply) freeReplyObject(reply);
     }
 
@@ -129,11 +178,13 @@ public:
         // Load counter from Redis
         std::lock_guard<std::mutex> lock(redis_mutex);
         redisReply* reply = (redisReply*)redisCommand(redis, "GET request_id_counter");
+        redis_requests_counter.Increment();
         if (reply && reply->type == REDIS_REPLY_STRING) {
             request_id_counter = atoll(reply->str);
         } else if (reply && reply->type == REDIS_REPLY_NIL) {
             request_id_counter = 0;
         } else {
+            redis_errors_counter.Increment();
             std::cerr << "Failed to load request_id_counter from Redis, starting from 0" << std::endl;
             request_id_counter = 0;
         }
@@ -164,6 +215,8 @@ public:
     }
 
     bool handle_request(CivetServer *server, struct mg_connection *conn, const std::string& method, const std::string& body = "") {
+        client_requests_counter.Increment();
+
         const struct mg_request_info *req_info = mg_get_request_info(conn);
         std::string path = req_info->request_uri ? req_info->request_uri : "/";
 
@@ -182,15 +235,32 @@ public:
         }
         std::cout << "request_data: " << request_data << std::endl;
 
+        bool redis_push_success = false;
         // Push to Redis queue
         if (redis && !redis->err) {
             std::lock_guard<std::mutex> lock(redis_mutex);
             std::string request_json = utility::conversions::to_utf8string(request_data.serialize());
             redisReply* reply = (redisReply*)redisCommand(redis, "RPUSH http:requests %s", request_json.c_str());
+            redis_requests_counter.Increment();
+            if (reply && reply->type == REDIS_REPLY_INTEGER) {
+                redis_push_success = true;
+            } else {
+                redis_errors_counter.Increment();
+            }
             if (reply) freeReplyObject(reply);
             // Increment write counter
             redisReply* incr_reply = (redisReply*)redisCommand(redis, "INCR stats:redis_writes");
+            redis_requests_counter.Increment();
+            if (!(incr_reply && incr_reply->type == REDIS_REPLY_INTEGER)) {
+                redis_errors_counter.Increment();
+            }
             if (incr_reply) freeReplyObject(incr_reply);
+        } else {
+            redis_errors_counter.Increment();
+        }
+
+        if (!redis_push_success) {
+            client_errors_counter.Increment();
         }
 
         // Wait for response (simplified - in real implementation would poll Redis)
@@ -248,12 +318,18 @@ int main() {
 		std::cout << std::endl;
 	}
 
+    // Start Prometheus exposer
+    prometheus::Exposer exposer{"0.0.0.0:9090"};
+    exposer.RegisterCollectable(registry);
+
     try {
         CivetServer server(cpp_options);
+        server.addHandler("/health", &health_handler);
         server.addHandler("/stats", &stats_handler);
         server.addHandler("/", &request_handler);
 
         std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8888" << std::endl;
+        std::cout << "Prometheus metrics available at http://0.0.0.0:9090/metrics" << std::endl;
 
         while (g_exit_flag == 0)
         {
