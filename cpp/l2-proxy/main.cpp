@@ -22,7 +22,6 @@
 #include <prometheus/counter.h>
 
 // Common variables
-static int g_exit_flag = 0;
 std::atomic<bool> shutdown_flag(false);
 
 // Environment variable for mode
@@ -70,10 +69,6 @@ prometheus::Counter& proxy_redis_errors_counter = l2_proxy_redis_errors_total.Ad
 prometheus::Counter& proxy_bytes_received_counter = l2_proxy_bytes_received_total.Add({});
 prometheus::Counter& proxy_bytes_sent_counter = l2_proxy_bytes_sent_total.Add({});
 
-void signal_handler(int signum) {
-    std::cout << "Received signal " << signum << ", exiting..." << std::endl;
-    g_exit_flag = 1;
-}
 
 class HealthHandler : public CivetHandler {
 private:
@@ -311,10 +306,6 @@ void run_proxy() {
         return;
     }
 
-    // Register signal handler for graceful shutdown
-    std::signal(SIGTERM, signal_handler);
-    std::signal(SIGINT, signal_handler);
-
     HealthHandler health_handler(redis);
     RequestHandler request_handler(redis);
     StatsHandler stats_handler(redis);
@@ -346,7 +337,7 @@ void run_proxy() {
         std::cout << "C++ DMZ Proxy listening on http://0.0.0.0:8888" << std::endl;
         std::cout << "Prometheus metrics available at http://0.0.0.0:9090/metrics" << std::endl;
 
-        while (g_exit_flag == 0)
+        while (!shutdown_flag)
         {
             sleep(1);
         }
@@ -560,9 +551,6 @@ public:
 };
 
 void run_worker() {
-    // Set up signal handlers for graceful shutdown
-    std::signal(SIGTERM, [](int){ shutdown_flag = true; });
-    std::signal(SIGINT, [](int){ shutdown_flag = true; });
 
     std::string redis_host = "valkey";
     int redis_port = 6379;
@@ -578,7 +566,15 @@ void run_worker() {
     worker.run();
 }
 
+void signal_handler(int signum) {
+    std::cout << "Received signal " << signum << ", exiting..." << std::endl;
+    shutdown_flag = true;
+}
+
 int main() {
+    std::signal(SIGTERM, signal_handler);
+    std::signal(SIGINT, signal_handler);
+
     const char* mode = std::getenv(MODE_ENV);
     if (!mode) {
         std::cerr << "Environment variable " << MODE_ENV << " not set. Please set MODE=proxy or MODE=worker" << std::endl;

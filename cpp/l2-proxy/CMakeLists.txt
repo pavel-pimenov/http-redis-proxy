@@ -9,23 +9,12 @@ find_package(CURL REQUIRED)
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h REQUIRED)
 find_library(HIREDIS_LIBRARY hiredis REQUIRED)
 
-# Add CivetWeb as external project
-# include(ExternalProject)
-# ExternalProject_Add(
-#    civetweb
-#    GIT_REPOSITORY https://github.com/civetweb/civetweb.git
-#    GIT_TAG v1.16
-#    CMAKE_ARGS -DCMAKE_BUILD_TYPE=Release -DCIVETWEB_ENABLE_SSL=ON -DCIVETWEB_BUILD_TESTING=OFF -DCIVETWEB_ENABLE_CXX=ON
-#    INSTALL_COMMAND ""
-#)
-
  # TODO
  #sqlite/sqlite3x_command.cpp
  #sqlite/sqlite3x_connection.cpp
  #sqlite/sqlite3x_reader.cpp
  #sqlite/sqlite3x_transaction.cpp
  #sqlite/sqlite3.c
-
 
 # Add executable
 add_executable(l2-proxy
