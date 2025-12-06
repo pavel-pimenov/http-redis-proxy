@@ -8,7 +8,47 @@
 #include <atomic>
 #include <csignal>
 
+#include <prometheus/registry.h>
+#include <prometheus/exposer.h>
+#include <prometheus/counter.h>
+
 std::atomic<bool> shutdown_flag(false);
+
+// Prometheus registry
+std::shared_ptr<prometheus::Registry> registry = std::make_shared<prometheus::Registry>();
+
+// Prometheus counters
+auto& l2_worker_requests_processed_total = prometheus::BuildCounter()
+    .Name("l2_worker_requests_processed_total")
+    .Help("Total number of requests processed by L2 worker")
+    .Register(*registry);
+
+auto& l2_worker_redis_operations_total = prometheus::BuildCounter()
+    .Name("l2_worker_redis_operations_total")
+    .Help("Total number of Redis operations performed by L2 worker")
+    .Register(*registry);
+
+auto& l2_worker_l2_calls_total = prometheus::BuildCounter()
+    .Name("l2_worker_l2_calls_total")
+    .Help("Total number of L2 server calls made by worker")
+    .Register(*registry);
+
+auto& l2_worker_redis_errors_total = prometheus::BuildCounter()
+    .Name("l2_worker_redis_errors_total")
+    .Help("Total number of Redis operation errors in L2 worker")
+    .Register(*registry);
+
+auto& l2_worker_l2_errors_total = prometheus::BuildCounter()
+    .Name("l2_worker_l2_errors_total")
+    .Help("Total number of L2 server call errors in worker")
+    .Register(*registry);
+
+// Counter instances
+prometheus::Counter& requests_processed_counter = l2_worker_requests_processed_total.Add({});
+prometheus::Counter& redis_operations_counter = l2_worker_redis_operations_total.Add({});
+prometheus::Counter& l2_calls_counter = l2_worker_l2_calls_total.Add({});
+prometheus::Counter& redis_errors_counter = l2_worker_redis_errors_total.Add({});
+prometheus::Counter& l2_errors_counter = l2_worker_l2_errors_total.Add({});
 
 class L2Worker {
 private:
@@ -49,6 +89,8 @@ public:
     }
 
     std::string call_l2_server(const std::string& path, const std::string& body) {
+        l2_calls_counter.Increment();
+
         std::string url = l2_server_url + path;
         std::string response_string;
 
@@ -68,6 +110,7 @@ public:
 
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK) {
+            l2_errors_counter.Increment();
             return "{\"error\": \"Failed to call L2 server: " + std::string(curl_easy_strerror(res)) + "\"}";
         }
 
@@ -75,6 +118,8 @@ public:
     }
 
     void process_request(const std::string& request_json) {
+        requests_processed_counter.Increment();
+
         Json::Value request_data;
         Json::Reader reader;
 
@@ -116,9 +161,13 @@ public:
         // Store response in Redis
         Json::StreamWriterBuilder writer;
         std::string response_str = Json::writeString(writer, response_data);
-        
+
+        redis_operations_counter.Increment();
         redisReply* reply = (redisReply*)redisCommand(redis, "SETEX http:response:%s 60 %s",
                                                      request_id.c_str(), response_str.c_str());
+        if (reply && reply->type != REDIS_REPLY_STATUS) {
+            redis_errors_counter.Increment();
+        }
         if (reply) freeReplyObject(reply);
     }
 
@@ -126,14 +175,21 @@ public:
         std::cout << "C++ L2 Worker started. Waiting for requests..." << std::endl;
 
         while (!shutdown_flag) {
+            redis_operations_counter.Increment();
             redisReply* reply = (redisReply*)redisCommand(redis, "BLPOP http:requests 10");
 
             if (reply && reply->type == REDIS_REPLY_ARRAY && reply->elements == 2) {
                 std::string request_json = reply->element[1]->str;
                 process_request(request_json);
                 // Increment read counter
+                redis_operations_counter.Increment();
                 redisReply* incr_reply = (redisReply*)redisCommand(redis, "INCR stats:redis_reads");
+                if (!(incr_reply && incr_reply->type == REDIS_REPLY_INTEGER)) {
+                    redis_errors_counter.Increment();
+                }
                 if (incr_reply) freeReplyObject(incr_reply);
+            } else if (reply && reply->type != REDIS_REPLY_ARRAY) {
+                redis_errors_counter.Increment();
             }
 
             if (reply) freeReplyObject(reply);
@@ -153,7 +209,13 @@ int main() {
     int redis_port = 6379;
     std::string l2_server_url = "http://l2-server:3000";
 
+    // Start Prometheus exposer
+    prometheus::Exposer exposer{"0.0.0.0:9091"};
+    exposer.RegisterCollectable(registry);
+
     L2Worker worker(redis_host, redis_port, l2_server_url);
+
+    std::cout << "C++ L2 Worker Prometheus metrics available at http://0.0.0.0:9091/metrics" << std::endl;
     worker.run();
 
     return 0;
