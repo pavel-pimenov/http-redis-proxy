@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.10)
 project(l2-proxy)
 
 # Find required packages
-# find_package(cpprestsdk REQUIRED)
 find_package(OpenSSL REQUIRED)
 
 # Find hiredis manually
