@@ -80,6 +80,9 @@ std::atomic<bool> shutdown_flag(false);
 // Environment variable for mode
 const char* MODE_ENV = "MODE";
 
+// Environment variable for number of threads
+const char* NUM_THREADS_ENV = "NUM_THREADS";
+
 // Initialize Tracer
 #ifdef USE_OPENTELEMETRY
 std::unique_ptr<TraceLogger> tracer;
@@ -425,19 +428,21 @@ void run_proxy() {
     RequestHandler request_handler(redis);
     StatsHandler stats_handler(redis);
 
-     const char *options[] = {
-	  "listening_ports", "8888",
-	  "num_threads", "32",
-	  "enable_directory_listing", "no",
-//      "max_connections", "1024",
-      "request_timeout_ms", "30000",
-	  0 };
+    // Read number of threads from environment variable
+    const char* num_threads_env = std::getenv(NUM_THREADS_ENV);
+    std::string num_threads = num_threads_env ? std::string(num_threads_env) : "32";
+
 	std::vector<std::string> cpp_options;
-	for (int i = 0; i < (sizeof(options) / sizeof(options[0]) - 1); i++) {
-		cpp_options.push_back(options[i]);
-		std::cout << options[i];
-		std::cout << std::endl;
-	}
+	cpp_options.push_back("listening_ports");
+	cpp_options.push_back("8888");
+	cpp_options.push_back("num_threads");
+	cpp_options.push_back(num_threads);
+	cpp_options.push_back("enable_directory_listing");
+	cpp_options.push_back("no");
+//      cpp_options.push_back("max_connections");
+//      cpp_options.push_back("1024");
+	cpp_options.push_back("request_timeout_ms");
+	cpp_options.push_back("30000");
 
     // Start Prometheus exposer
     prometheus::Exposer exposer{"0.0.0.0:9090"};

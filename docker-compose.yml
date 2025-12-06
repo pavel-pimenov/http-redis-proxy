@@ -72,6 +72,7 @@ services:
     environment:
       - MODE=proxy
       - USE_SEQUENTIAL_REQUEST_ID=true
+      - NUM_THREADS=${NUM_THREADS:-32}
       - OPENOBSERVE_URL=http://host.docker.internal:5080
       - OPENOBSERVE_LOGIN=${OPENOBSERVE_LOGIN}
       - OPENOBSERVE_PASSWORD=${OPENOBSERVE_PASSWORD}

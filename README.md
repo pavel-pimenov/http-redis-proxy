@@ -376,3 +376,17 @@ The JaegerLogger sends traces in the correct Jaeger JSON format to `http://jaege
 
 The services will now send traces for HTTP requests processed by the proxy and worker components. You can view the traces in the Jaeger UI at [](http://localhost:16686)<http://localhost:16686> after making requests to the proxy at [](http://localhost:8888.)<http://localhost:8888.>
 
+'ve successfully updated the code to read the number of threads from an environment variable. Here's what I changed:
+
+1. __Added environment variable constant__: Defined `NUM_THREADS_ENV = "NUM_THREADS"` at the top of the file alongside other environment variable constants.
+
+2. __Modified `run_proxy()` function__: Added code to read the `NUM_THREADS` environment variable:
+
+   ```cpp
+   const char* num_threads_env = std::getenv(NUM_THREADS_ENV);
+   std::string num_threads = num_threads_env ? std::string(num_threads_env) : "32";
+   ```
+
+3. __Updated CivetServer options__: Replaced the hardcoded options array with a dynamic `std::vector<std::string>` that uses the environment variable value for `num_threads`.
+
+The code now defaults to 32 threads if `NUM_THREADS` is not set, maintaining backward compatibility. You can now configure the number of threads by setting the `NUM_THREADS` environment variable when running the proxy.
