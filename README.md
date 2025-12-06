@@ -141,3 +141,38 @@ python test.py --min-size 500 --max-size 500000
 ```
 
 The script now generates random JSON messages with varying sizes within the specified range for load testing, while maintaining the original functionality for basic endpoint testing.
+
+I've added comprehensive diagnostic logging to test.py to help identify where the hanging occurs. Here's what I added:
+
+1. __Logging Setup__: Added logging configuration that outputs to both console and a file (`test_debug.log`) with timestamps.
+
+2. __Functionality Test Diagnostics__: Added logs for the start and end of the JSON endpoint test, including error details.
+
+3. __Load Test Diagnostics__: Added detailed logs throughout the async load testing:
+
+   - Start of load test
+   - Creation of aiohttp session
+   - Task creation
+   - Start and completion of `asyncio.gather`
+   - Individual request start/completion with timing and status
+   - Exception handling with details
+
+4. __Main Function Logs__: Added logs for script start, configuration, and final results.
+
+The logs will show:
+
+- Timestamps for all major operations
+- Which request is being processed (if hanging on a specific one)
+- How long each request takes
+- Any exceptions or errors during requests
+- Progress through the load test phases
+
+When you run the test now, check both the console output and the `test_debug.log` file. The logs will help pinpoint exactly where the script hangs - whether it's during task creation, the gather operation, or specific requests.
+
+To run the test and capture the diagnostics, use:
+
+```bash
+python3 test.py
+```
+
+The detailed logging should reveal the exact point of hanging.

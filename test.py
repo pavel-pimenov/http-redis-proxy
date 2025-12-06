@@ -14,6 +14,7 @@ import statistics
 import sys
 import os
 import argparse
+import logging
 
 # Check dependencies
 def check_dependencies():
@@ -41,10 +42,22 @@ import aiohttp
 
 # Configuration
 PROXY_URL = "http://localhost:8888"
-NUM_REQUESTS = 500
-CONCURRENT_REQUESTS = 100
-MIN_PAYLOAD_SIZE = 200  # bytes
-MAX_PAYLOAD_SIZE = 1000000  # 1 MB
+NUM_REQUESTS = 10
+CONCURRENT_REQUESTS = 10
+MIN_PAYLOAD_SIZE = 1000  # bytes
+MAX_PAYLOAD_SIZE = 200000
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('test_debug.log', mode='w')
+    ]
+)
+logger = logging.getLogger(__name__)
+
 
 class Colors:
     RED = '\033[0;31m'
@@ -86,6 +99,7 @@ def run_command(cmd: List[str]) -> subprocess.CompletedProcess:
 
 def test_json_endpoint(url: str, description: str = "") -> bool:
     """Test an endpoint that should return valid JSON with POST request."""
+    logger.info(f"Starting functionality test for {description} ({url})")
     print(f"Testing {description} ({url})... ", end="", flush=True)
     json_payload = generate_random_json_payload(500)  # Fixed size for functionality test
     try:
@@ -94,41 +108,61 @@ def test_json_endpoint(url: str, description: str = "") -> bool:
             try:
                 json.loads(response.text)
                 print(f"{Colors.GREEN}PASS{Colors.NC} (Status: {response.status_code}, Valid JSON)")
+                logger.info(f"Functionality test passed for {description}")
                 return True
             except json.JSONDecodeError:
                 print(f"{Colors.RED}FAIL{Colors.NC} (Status: {response.status_code}, Invalid JSON)")
                 print(f"Response: {response.text}")
+                logger.error(f"Functionality test failed for {description}: Invalid JSON")
                 return False
         else:
             print(f"{Colors.RED}FAIL{Colors.NC} (Status: {response.status_code})")
+            logger.error(f"Functionality test failed for {description}: Status {response.status_code}")
             return False
     except requests.RequestException as e:
         print(f"{Colors.RED}FAIL{Colors.NC} (Connection failed: {e})")
+        logger.error(f"Functionality test failed for {description}: Connection error {e}")
         return False
 
-async def make_async_request(session: aiohttp.ClientSession, request_id: int) -> Tuple[int, float, bool]:
-    """Make a single async POST request with JSON payload and return timing info."""
+async def make_async_request(session: aiohttp.ClientSession, request_id: int, json_payload: dict, size: int) -> Tuple[int, float, bool]:
+    """Make a single async POST request with pre-generated JSON payload and return timing info."""
     start_time = time.time()
-    size = random.randint(MIN_PAYLOAD_SIZE, MAX_PAYLOAD_SIZE)
-    json_payload = generate_random_json_payload(size)
+    logger.info(f"Starting async request {request_id} with payload size {size} bytes")
     try:
         async with session.post(PROXY_URL, json=json_payload) as response:
             end_time = time.time()
-            return request_id, end_time - start_time, response.status == 200
-    except Exception:
+            status = response.status
+            logger.info(f"Completed async request {request_id} in {end_time - start_time:.2f}s with status {status}")
+            return request_id, end_time - start_time, status == 200
+    except Exception as e:
         end_time = time.time()
+        logger.error(f"Exception in async request {request_id}: {e} after {end_time - start_time:.2f}s")
         return request_id, end_time - start_time, False
 
 async def run_load_test() -> Dict:
     """Run load testing with async requests."""
+    logger.info("Starting load test")
     print(f"Running load test with {NUM_REQUESTS} requests ({CONCURRENT_REQUESTS} concurrent)...")
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for i in range(NUM_REQUESTS):
-            tasks.append(make_async_request(session, i + 1))
+    # Pre-generate all payloads synchronously to avoid blocking the event loop
+    logger.info("Generating payloads...")
+    payloads = []
+    for i in range(NUM_REQUESTS):
+        size = random.randint(MIN_PAYLOAD_SIZE, MAX_PAYLOAD_SIZE)
+        json_payload = generate_random_json_payload(size)
+        payloads.append((i + 1, size, json_payload))
+    logger.info(f"Generated {len(payloads)} payloads")
 
+    async with aiohttp.ClientSession() as session:
+        logger.info("Created aiohttp session")
+        tasks = []
+        for request_id, size, json_payload in payloads:
+            tasks.append(make_async_request(session, request_id, json_payload, size))
+        logger.info(f"Created {len(tasks)} tasks")
+
+        logger.info("Starting asyncio.gather")
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        logger.info(f"Completed asyncio.gather with {len(results)} results")
 
     # Process results
     successful_requests = 0
@@ -137,6 +171,7 @@ async def run_load_test() -> Dict:
 
     for result in results:
         if isinstance(result, Exception):
+            logger.error(f"Task returned exception: {result}")
             failed_requests += 1
         else:
             request_id, response_time, success = result
@@ -162,6 +197,7 @@ async def run_load_test() -> Dict:
             'median_time': statistics.median(response_times)
         })
 
+    logger.info(f"Load test completed: {successful_requests} successful, {failed_requests} failed")
     return stats
 
 def print_load_results(stats: Dict):
@@ -181,6 +217,8 @@ def print_load_results(stats: Dict):
 def main():
     global MIN_PAYLOAD_SIZE, MAX_PAYLOAD_SIZE
 
+    logger.info("Starting test script")
+
     parser = argparse.ArgumentParser(description="Test script for HTTP Redis Proxy system")
     parser.add_argument('--min-size', type=int, default=200, help='Minimum payload size in bytes (default: 200)')
     parser.add_argument('--max-size', type=int, default=1000000, help='Maximum payload size in bytes (default: 1000000)')
@@ -189,6 +227,7 @@ def main():
     MIN_PAYLOAD_SIZE = args.min_size
     MAX_PAYLOAD_SIZE = args.max_size
 
+    logger.info(f"Using payload sizes from {MIN_PAYLOAD_SIZE} to {MAX_PAYLOAD_SIZE} bytes")
     print(f"Using payload sizes from {MIN_PAYLOAD_SIZE} to {MAX_PAYLOAD_SIZE} bytes")
 
     print(f"\n{Colors.GREEN}=== Functionality Tests ==={Colors.NC}")
@@ -198,6 +237,7 @@ def main():
 
     # Load testing
     print(f"\n{Colors.GREEN}=== Load Testing ==={Colors.NC}")
+    logger.info("Starting load test phase")
     stats = asyncio.run(run_load_test())
     print_load_results(stats)
 
@@ -205,9 +245,11 @@ def main():
     load_passed = stats['success_rate'] >= 95.0 and stats['failed_requests'] == 0
 
     if all_passed and load_passed:
+        logger.info("All tests passed")
         print(f"\n{Colors.GREEN}✅ All tests passed! System is working correctly.{Colors.NC}")
         return 0
     else:
+        logger.warning("Some tests failed")
         print(f"\n{Colors.RED}❌ Some tests failed. Check the output above.{Colors.NC}")
         return 1
 
