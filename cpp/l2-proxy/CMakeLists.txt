@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.14)
 project(l2-proxy)
+
+# Options for tracing backends
+option(USE_OPENTELEMETRY "Use OpenTelemetry tracing" OFF)
+option(USE_JAEGER "Use Jaeger tracing" OFF)
+
 # Find required packages
 find_package(OpenSSL REQUIRED)
 find_package(CURL REQUIRED)
@@ -42,6 +47,15 @@ target_include_directories(l2-proxy PRIVATE ${SOURCE_DIR}/include)
 
 # Link libraries
 target_link_libraries(l2-proxy PRIVATE ${HIREDIS_LIBRARY} OpenSSL::SSL OpenSSL::Crypto CURL::libcurl)
+
+# Set compiler definitions based on options
+if(USE_OPENTELEMETRY)
+    target_compile_definitions(l2-proxy PRIVATE USE_OPENTELEMETRY)
+endif()
+
+if(USE_JAEGER)
+    target_compile_definitions(l2-proxy PRIVATE USE_JAEGER)
+endif()
 
 include_directories(prometheus-cpp/core/include)
 include_directories(prometheus-cpp/include)

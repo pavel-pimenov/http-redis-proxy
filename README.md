@@ -281,3 +281,98 @@ Perfect! The build completed successfully and quickly. I've successfully removed
 6. __Verified fast build__ - the project now builds much quicker without the heavy OpenTelemetry dependency
 
 The TraceLogger sends traces to the configured OpenObserve endpoint with attributes like HTTP method, URL, status code, and request ID, exactly as requested. The build time has been significantly improved by removing the large OpenTelemetry library.
+
+
+I've successfully wrapped the OpenTelemetry tracing code with `#ifdef USE_OPENTELEMETRY` and created a Jaeger tracer implementation alongside it with `#ifdef USE_JAEGER`. Here's what I've done:
+
+## Changes Made:
+
+### 1. __trace_loger.hpp__:
+
+- Wrapped the existing `TraceLogger` class with `#ifdef USE_OPENTELEMETRY`
+- Added a new `JaegerLogger` class with `#ifdef USE_JAEGER` that sends spans to Jaeger collector via HTTP
+- Both classes have the same interface for easy switching
+
+### 2. __main.cpp__:
+
+- Added conditional compilation for tracer types using a `TracerType` typedef
+
+- Wrapped tracer declarations and initialization functions with appropriate `#ifdef` blocks
+
+- Wrapped all tracer usage in `RequestHandler` and `L2Worker` with `#if defined(USE_OPENTELEMETRY) || defined(USE_JAEGER)`
+
+- Added environment variable support:
+
+  - `OPENOBSERVE_URL` for OpenTelemetry (existing)
+  - `JAEGER_URL` for Jaeger (new)
+
+## How to Use:
+
+To compile with OpenTelemetry support:
+
+```bash
+g++ -DUSE_OPENTELEMETRY ... 
+```
+
+To compile with Jaeger support:
+
+```bash
+g++ -DUSE_JAEGER ...
+```
+
+The code now conditionally includes the appropriate tracer based on the defined macro, and both implementations send traces to their respective backends using similar JSON formats over HTTP.
+
+**
+
+and updated all necessary files for conditional compilation. Here's a summary of what I've done:
+
+## Changes Made:
+
+### 1. __docker-compose.yml__:
+
+- Added Jaeger service using `jaegertracing/all-in-one:latest` image
+- Exposed ports 16686 (Jaeger UI) and 14268 (Jaeger collector HTTP)
+- Added `JAEGER_URL=http://jaeger:14268/api/traces` to both proxy and worker services
+- Added build args for `USE_OPENTELEMETRY` and `USE_JAEGER` to both services
+
+### 2. __CMakeLists.txt__:
+
+- Added CMake options `USE_OPENTELEMETRY` and `USE_JAEGER`
+- Added conditional `target_compile_definitions` to define the macros at compile time
+
+### 3. __Dockerfile__:
+
+- Added build arguments `USE_OPENTELEMETRY` and `USE_JAEGER` with default OFF
+- Modified cmake command to pass these options
+
+## How to Use:
+
+To enable Jaeger tracing:
+
+```bash
+export USE_JAEGER=ON
+docker-compose up
+```
+
+To enable OpenTelemetry tracing:
+
+```bash
+export USE_OPENTELEMETRY=ON
+docker-compose up
+```
+
+The Jaeger UI will be available at `http://localhost:16686` when the service is running.
+
+Both tracing backends are mutually exclusive at compile ti
+
+
+The code has been fixed to properly send traces to Jaeger:2.13.0. Here are the key changes made:
+
+1. __Fixed the Jaeger endpoint duplication bug__: In `main.cpp`, the JaegerLogger was incorrectly appending "/api/traces" to an already complete JAEGER_URL environment variable, resulting in "[](http://jaeger:14268/api/traces/api/traces)<http://jaeger:14268/api/traces/api/traces>". This has been corrected to use the endpoint directly.
+
+2. __Enabled Jaeger tracing__: Updated `docker-compose.yml` to set `USE_JAEGER=ON` for both the l2-service-proxy and l2-service-worker services.
+
+The JaegerLogger sends traces in the correct Jaeger JSON format to `http://jaeger:14268/api/traces`, which Jaeger 2.13.0 accepts via its HTTP collector API. Jaeger is configured with OTLP enabled, but it still supports the legacy Jaeger format at this endpoint.
+
+The services will now send traces for HTTP requests processed by the proxy and worker components. You can view the traces in the Jaeger UI at [](http://localhost:16686)<http://localhost:16686> after making requests to the proxy at [](http://localhost:8888.)<http://localhost:8888.>
+

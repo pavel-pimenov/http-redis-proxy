@@ -24,6 +24,12 @@
 #include "nlohmann/json.hpp"
 #include "trace_loger.hpp"
 
+#if defined(USE_OPENTELEMETRY)
+using TracerType = TraceLogger;
+#elif defined(USE_JAEGER)
+using TracerType = JaegerLogger;
+#endif
+
 // Simple base64 encoding function
 std::string base64_encode(const std::string& input) {
     const std::string base64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -74,7 +80,8 @@ std::atomic<bool> shutdown_flag(false);
 // Environment variable for mode
 const char* MODE_ENV = "MODE";
 
-// Initialize TraceLogger
+// Initialize Tracer
+#ifdef USE_OPENTELEMETRY
 std::unique_ptr<TraceLogger> tracer;
 void init_tracer() {
     const char* openobserve_url = std::getenv("OPENOBSERVE_URL");
@@ -95,6 +102,23 @@ void init_tracer() {
 
     tracer = std::make_unique<TraceLogger>(endpoint, auth);
 }
+#endif
+
+#ifdef USE_JAEGER
+std::unique_ptr<JaegerLogger> tracer;
+void init_tracer() {
+    const char* jaeger_url = std::getenv("JAEGER_URL");
+
+    if (!jaeger_url) {
+        std::cerr << "JAEGER_URL not set, tracing disabled" << std::endl;
+        return;
+    }
+
+    std::string endpoint = std::string(jaeger_url);
+
+    tracer = std::make_unique<JaegerLogger>(endpoint);
+}
+#endif
 
 // Prometheus registry for proxy
 std::shared_ptr<prometheus::Registry> proxy_registry = std::make_shared<prometheus::Registry>();
@@ -373,6 +397,7 @@ public:
         mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response_json.c_str());
 
         // Send tracing span
+#if defined(USE_OPENTELEMETRY) || defined(USE_JAEGER)
         if (tracer) {
             auto end_us = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::system_clock::now().time_since_epoch()
@@ -380,6 +405,7 @@ public:
 
             tracer->log_request(method, path, 200, start_us, end_us, "l2-proxy", request_id);
         }
+#endif
 
         return true;
     }
@@ -619,6 +645,7 @@ public:
         if (reply) freeReplyObject(reply);
 
         // Send tracing span
+#if defined(USE_OPENTELEMETRY) || defined(USE_JAEGER)
         if (tracer) {
             auto end_us = std::chrono::duration_cast<std::chrono::microseconds>(
                 std::chrono::system_clock::now().time_since_epoch()
@@ -644,6 +671,7 @@ public:
                 attrs
             );
         }
+#endif
     }
 
     void run() {
@@ -700,8 +728,10 @@ int main() {
     std::signal(SIGTERM, signal_handler);
     std::signal(SIGINT, signal_handler);
 
-    // Initialize TraceLogger
+    // Initialize Tracer
+#if defined(USE_OPENTELEMETRY) || defined(USE_JAEGER)
     init_tracer();
+#endif
 
     const char* mode = std::getenv(MODE_ENV);
     if (!mode) {

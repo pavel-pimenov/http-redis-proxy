@@ -27,6 +27,20 @@ services:
   #   networks:
   #     - l2_network
 
+  jaeger:
+    image: cr.jaegertracing.io/jaegertracing/jaeger:2.13.0
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "4317:4317"
+      - "4318:4318"
+      - "5778:5778"
+      - "9411:9411"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - l2_network
+
   l2-server:
     image: ealen/echo-server:latest
     ports:
@@ -42,7 +56,11 @@ services:
       - l2_network
 
   l2-service-proxy:
-    build: ./cpp/l2-proxy
+    build:
+      context: ./cpp/l2-proxy
+      args:
+        USE_OPENTELEMETRY: ${USE_OPENTELEMETRY:-OFF}
+        USE_JAEGER: ${USE_JAEGER:-ON}
     ports:
       - "8888:8888"
       - "9090:9090"
@@ -57,6 +75,7 @@ services:
       - OPENOBSERVE_URL=http://host.docker.internal:5080
       - OPENOBSERVE_LOGIN=${OPENOBSERVE_LOGIN}
       - OPENOBSERVE_PASSWORD=${OPENOBSERVE_PASSWORD}
+      - JAEGER_URL=http://jaeger:14268/api/traces
     networks:
       - l2_network
     labels:
@@ -67,19 +86,24 @@ services:
       - "traefik.http.services.l2proxy.loadbalancer.server.port=8888"
 
   l2-service-worker:
-    build: ./cpp/l2-proxy
+    build:
+      context: ./cpp/l2-proxy
+      args:
+        USE_OPENTELEMETRY: ${USE_OPENTELEMETRY:-OFF}
+        USE_JAEGER: ${USE_JAEGER:-ON}
     ports:
       - "9091:9091"
     depends_on:
       - valkey
       - l2-server
     extra_hosts:
-      - "host.docker.internal:host-gateway"      
+      - "host.docker.internal:host-gateway"
     environment:
       - MODE=worker
       - OPENOBSERVE_URL=http://host.docker.internal:5080
       - OPENOBSERVE_LOGIN=${OPENOBSERVE_LOGIN}
       - OPENOBSERVE_PASSWORD=${OPENOBSERVE_PASSWORD}
+      - JAEGER_URL=http://jaeger:14268/api/traces
     networks:
       - l2_network
 
