@@ -3,10 +3,10 @@ FROM ubuntu:24.04 AS builder
 RUN apt-get update && apt-get install -y \
     g++ \
     cmake \
+    pkg-config \
     libhiredis-dev \
     libssl-dev \
     libcpprest-dev \
-    git \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -14,7 +14,7 @@ COPY CMakeLists.txt main.cpp ./
 COPY civetweb/ civetweb/
 COPY jsoncpp/ jsoncpp/
 COPY prometheus-cpp/ prometheus-cpp/
-COPY sqlite/ sqlite/
+# COPY sqlite/ sqlite/
 RUN mkdir build && cd build && cmake .. && make
 
 FROM ubuntu:24.04

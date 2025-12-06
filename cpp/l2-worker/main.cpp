@@ -1,6 +1,5 @@
 #include <hiredis/hiredis.h>
 #include <curl/curl.h>
-#include <jsoncpp/json/json.h>
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -8,6 +7,7 @@
 #include <atomic>
 #include <csignal>
 
+#include "jsoncpp/json.h"
 #include <prometheus/registry.h>
 #include <prometheus/exposer.h>
 #include <prometheus/counter.h>

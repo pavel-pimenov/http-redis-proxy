@@ -3,8 +3,6 @@ project(l2-worker)
 
 # Find required packages
 find_package(CURL REQUIRED)
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(JSONCPP REQUIRED jsoncpp)
 
 # Find hiredis manually
 find_path(HIREDIS_INCLUDE_DIR hiredis/hiredis.h)
@@ -13,6 +11,7 @@ find_library(HIREDIS_LIBRARY hiredis)
 # Add executable
 add_executable(l2-worker
 main.cpp
+jsoncpp/jsoncpp.cpp
 civetweb/CivetServer.cpp
 civetweb/civetweb.c
 prometheus-cpp/pull/src/basic_auth.cc
@@ -37,12 +36,14 @@ prometheus-cpp/core/src/detail/utils.cc
 )
 
 # Include directories
-target_include_directories(l2-worker PRIVATE ${HIREDIS_INCLUDE_DIR} ${JSONCPP_INCLUDE_DIRS})
+target_include_directories(l2-worker PRIVATE ${HIREDIS_INCLUDE_DIR})
+
 
 include_directories(prometheus-cpp/core/include)
 include_directories(prometheus-cpp/util/include)
 include_directories(prometheus-cpp/pull/include)
 include_directories(civetweb)
+include_directories(jsoncpp)
 
 # Link libraries
-target_link_libraries(l2-worker PRIVATE CURL::libcurl ${HIREDIS_LIBRARY} ${JSONCPP_LIBRARIES})
+target_link_libraries(l2-worker PRIVATE CURL::libcurl ${HIREDIS_LIBRARY})
