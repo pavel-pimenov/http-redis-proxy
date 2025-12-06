@@ -13,8 +13,7 @@
 #include "CivetServer.h"
 #include <hiredis/hiredis.h>
 
-#include <cpprest/json.h>
-using namespace web;
+#include "jsoncpp/json.h"
 
 #include <prometheus/registry.h>
 #include <prometheus/exposer.h>
@@ -134,11 +133,12 @@ public:
             reads = atoll(reads_reply->str);
         }
 
-        json::value stats;
-        stats[U("redis_writes")] = json::value::number(writes);
-        stats[U("redis_reads")] = json::value::number(reads);
+        Json::Value stats;
+        stats["redis_writes"] = (Json::Int64)writes;
+        stats["redis_reads"] = (Json::Int64)reads;
 
-        std::string stats_json = utility::conversions::to_utf8string(stats.serialize());
+        Json::StreamWriterBuilder writer;
+        std::string stats_json = Json::writeString(writer, stats);
         mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", stats_json.c_str());
 
         if (writes_reply) freeReplyObject(writes_reply);
@@ -239,12 +239,12 @@ public:
         // std::string request_data = "{\"id\": \"" + request_id + "\", \"method\": \"" + method + "\", \"path\": \"" + path + "\"}";
 
             // Prepare request data for Redis
-        json::value request_data;
-        request_data[U("id")] = json::value::string(utility::conversions::to_string_t(request_id));
-        request_data[U("method")] = json::value::string(utility::conversions::to_string_t(method));
-        request_data[U("path")] = json::value::string(utility::conversions::to_string_t(path));
+        Json::Value request_data;
+        request_data["id"] = request_id;
+        request_data["method"] = method;
+        request_data["path"] = path;
         if (!body.empty()) {
-            request_data[U("body")] = json::value::string(utility::conversions::to_string_t(body));
+            request_data["body"] = body;
         }
         std::cout << "request_data: " << request_data << std::endl;
 
@@ -252,7 +252,8 @@ public:
         // Push to Redis queue
         if (redis && !redis->err) {
             std::lock_guard<std::mutex> lock(redis_mutex);
-            std::string request_json = utility::conversions::to_utf8string(request_data.serialize());
+            Json::StreamWriterBuilder writer;
+            std::string request_json = Json::writeString(writer, request_data);
             redisReply* reply = (redisReply*)redisCommand(redis, "RPUSH http:requests %s", request_json.c_str());
             redis_requests_counter.Increment();
             if (reply && reply->type == REDIS_REPLY_INTEGER) {
@@ -285,15 +286,16 @@ public:
         // std::string response = "{\"message\": \"Processed by C++ DMZ Proxy\", \"request_id\": \"" + request_id + "\", \"language\": \"C++\", \"timestamp\": " + std::to_string(timestamp) + "}";
 
 // Send response
-        json::value response;
-        response[U("message")] = json::value::string(U("Processed by C++ DMZ Proxy"));
-        response[U("request_id")] = json::value::string(utility::conversions::to_string_t(request_id));
-        response[U("language")] = json::value::string(U("C++"));
-        response[U("timestamp")] = json::value::number(std::chrono::duration_cast<std::chrono::seconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
+        Json::Value response;
+        response["message"] = "Processed by C++ DMZ Proxy";
+        response["request_id"] = request_id;
+        response["language"] = "C++";
+        response["timestamp"] = (Json::Int64)std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
         std::cout << "response" << response << std::endl;
 
-        std::string response_json = utility::conversions::to_utf8string(response.serialize());
+        Json::StreamWriterBuilder writer;
+        std::string response_json = Json::writeString(writer, response);
         bytes_sent_counter.Increment(response_json.size());
         mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n%s", response_json.c_str());
         return true;
